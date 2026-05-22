@@ -276,3 +276,7 @@ git checkout -b feature/<name>
 | `.calendar-cache.json` | 项目根目录 | ❌ |
 | `.calendar-notifications.json` | 项目根目录 | ❌ |
 | `.calendar-muted-events.json` | 项目根目录 | ❌ |
+
+## 设计决策记录
+
+- **2026-05-22 不引入 Slack slash command（`/cwd` 等）**：PoC 验证发现两点硬限制 — (1) Slack 客户端禁止在 thread 内输入 slash command（"消息列不支持"）；(2) slash payload 不带 `thread_ts`。bot 核心场景是 thread，迁移后体验反而割裂（thread 用 `-`，顶层用 `/`）。继续维持 `-cmd` 前缀。
