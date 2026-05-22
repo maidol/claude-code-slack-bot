@@ -459,6 +459,10 @@ export class SlackHandler {
       return;
     }
     if (text && this.isTrustCommand(text)) {
+      if (config.adminUserIds.length > 0 && !config.adminUserIds.includes(user)) {
+        await say({ text: `🚫 ${t('cmd.trustMode.denied', locale)}`, thread_ts: thread_ts });
+        return;
+      }
       this.channelPermissionModes.set(channel, 'trust');
       await say({ text: `⚡ ${t('cmd.trustMode', locale)}`, thread_ts: thread_ts });
       return;
@@ -2410,15 +2414,31 @@ export class SlackHandler {
   // --- Event handlers ---
 
   setupEventHandlers() {
-    // Handle direct messages
+    // Handle direct messages + thread replies (auto-respond when session exists)
     this.app.message(async ({ message, say }) => {
-      if (message.subtype === undefined && 'user' in message) {
+      if (message.subtype !== undefined || !('user' in message)) return;
+      const msg = message as MessageEvent;
+      const botUserId = await this.getBotUserId();
+      if (msg.user === botUserId) return;
+
+      const channelType = (message as { channel_type?: string }).channel_type;
+      const isDM = channelType === 'im';
+
+      if (isDM) {
         this.logger.info('Handling direct message event');
-        const msg = message as MessageEvent;
-        if (msg.text) {
-          msg.text = msg.text.replace(/<@[^>]+>/g, '').trim();
-        }
+        if (msg.text) msg.text = msg.text.replace(/<@[^>]+>/g, '').trim();
         await this.handleMessage(msg, say);
+        return;
+      }
+
+      // Channel/group: only auto-respond inside a thread that already has a session.
+      // Skip messages that mention the bot — app_mention handler will process those.
+      if (msg.thread_ts && (!msg.text || !msg.text.includes(`<@${botUserId}>`))) {
+        const hasSession = !!this.cliHandler.getSession(msg.user, msg.channel, msg.thread_ts);
+        if (hasSession) {
+          this.logger.info('Handling thread reply (no mention)');
+          await this.handleMessage(msg, say);
+        }
       }
     });
 

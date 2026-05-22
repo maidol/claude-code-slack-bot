@@ -18,6 +18,10 @@ oauth_config:
       - channels:history
       - chat:write
       - chat:write.public
+      - groups:history
+      - channels:read
+      - groups:read
+      - mpim:read
       - im:history
       - im:read
       - im:write
@@ -29,6 +33,8 @@ settings:
     bot_events:
       - app_mention
       - message.im
+      - message.channels
+      - message.groups
       - member_joined_channel
   interactivity:
     is_enabled: false

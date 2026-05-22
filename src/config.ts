@@ -31,6 +31,8 @@ export const config = {
       port: parseInt(process.env.REPORTS_SERVER_PORT || '8765', 10),
     },
   },
+  adminUserIds: (process.env.ADMIN_USER_IDS || '')
+    .split(',').map((s) => s.trim()).filter(Boolean),
   memoryWatchdog: {
     enabled: process.env.MEMORY_WATCHDOG_ENABLED !== '0',
     thresholdPct: parseInt(process.env.MEMORY_WATCHDOG_THRESHOLD_PCT || '90', 10),

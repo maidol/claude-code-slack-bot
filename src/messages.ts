@@ -44,6 +44,10 @@ const messages: Record<string, Record<Locale, string>> = {
     en: 'Trust mode — All tools auto-approved.\nUse `-default` or `-safe` to require approvals.',
     ko: '신뢰 모드 — 모든 도구 자동 승인.\n`-default` 또는 `-safe`로 승인 필요 모드로 전환.',
   },
+  'cmd.trustMode.denied': {
+    en: 'Trust mode is restricted to admins. Contact the bot owner to be added to `ADMIN_USER_IDS`.',
+    ko: '신뢰 모드는 관리자만 사용할 수 있습니다. 봇 운영자에게 `ADMIN_USER_IDS` 등록을 요청하세요.',
+  },
 
   // Sessions
   'cmd.sessions.noCwd': { en: 'Set a working directory first (`-cwd <path>`) to list sessions.', ko: '세션 목록을 보려면 먼저 작업 디렉터리를 설정하세요 (`-cwd <경로>`).' },

@@ -23,6 +23,7 @@
         "channels:history",
         "chat:write",
         "chat:write.public",
+        "groups:history",
         "im:history",
         "im:read",
         "im:write",
@@ -37,6 +38,8 @@
       "bot_events": [
         "app_mention",
         "message.im",
+        "message.channels",
+        "message.groups",
         "member_joined_channel"
       ]
     },
