@@ -68,7 +68,7 @@ update.bat                    # Windows
 - 命令解析基于正则，遵循 `slack-handler.ts` 的 `is*Command()` / `parse*Command()` 模式
 - `-stop`：调用 `CliProcess.interrupt()` 中断 CLI 进程（会话状态保留）
 - `-plan <prompt>`：以 `permissionMode: 'plan'` 只读运行 → 通过 Execute 按钮恢复会话执行
-- `-default`/`-safe`/`-trust`：权限模式切换（自由度依次递增：default → safe → trust）
+- `-default`/`-d`/`-safe`/`-trust`：权限模式切换（自由度依次递增：default → safe → trust）
 - 模型选择（`config.defaultModel`，env `DEFAULT_MODEL` — 默认 `sonnet`）：
   - `-m`/`-model [名称]`/`모델 [名称]` — 查询/设置频道模型（`sonnet`、`opus`、`haiku`、完整 ID、`default`）
   - `-opus`/`-o`、`-sonnet`/`-s`、`-haiku`/`-h` — 通过别名立即切换频道模型

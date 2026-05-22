@@ -449,7 +449,7 @@ Enables calendar event creation, reminders, and briefing with calendar data. See
 1. Create a GCP project and enable Google Calendar API
 2. Create OAuth credentials (Desktop app) and save to `~/.claude/google-calendar-credentials.json`
 3. **Publish the app** in Google Cloud Console → Audience → Publish app (otherwise refresh tokens expire after 7 days)
-4. Authenticate: `GOOGLE_OAUTH_CREDENTIALS="$HOME/.claude/gcp-oauth.keys.json" npx @cocal/google-calendar-mcp auth`
+4. Authenticate: `GOOGLE_OAUTH_CREDENTIALS="$HOME/.claude/google-calendar-credentials.json" npx @cocal/google-calendar-mcp auth`
 5. Create `mcp-servers.json` in project root (see [docs/google-calendar-setup.md](docs/google-calendar-setup.md#step-6-configure-mcp-server))
 
 **Features unlocked:**
@@ -482,10 +482,11 @@ Monitors system commit memory to prevent OOM crashes from runaway processes.
 
 **Environment variables (all optional):**
 ```env
-MEMORY_WATCHDOG_ENABLED=1           # 0 to disable (default: enabled)
-MEMORY_WATCHDOG_THRESHOLD_PCT=80    # System commit % to trigger alert
-MEMORY_WATCHDOG_INTERVAL_SEC=300    # Check interval (default: 5 min)
-MEMORY_WATCHDOG_AUTO_KILL_SEC=300   # Auto-kill if no response (default: 5 min)
+MEMORY_WATCHDOG_ENABLED=1                   # 0 to disable (default: enabled)
+MEMORY_WATCHDOG_THRESHOLD_PCT=90            # System commit % to trigger alert (default: 90)
+MEMORY_WATCHDOG_INTERVAL_SEC=180            # Check interval (default: 3 min)
+MEMORY_WATCHDOG_AUTO_KILL_SEC=600           # Auto-kill if no response (default: 10 min)
+MEMORY_WATCHDOG_PROCESS_THRESHOLD_MB=7168   # Single-process commit threshold MB (default: 7 GB)
 ```
 
 When triggered, sends a Slack message with Kill/Ignore/Exclude buttons. Auto-kills the largest non-system process after the timeout if no response. Exclude registers the PID as an exception for the current runtime (auto-cleared when the process exits).

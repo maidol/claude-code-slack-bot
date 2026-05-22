@@ -93,7 +93,7 @@ Run the authentication flow interactively:
 npx -y @cocal/google-calendar-mcp auth
 ```
 
-This opens a browser window for Google OAuth consent. After granting access, tokens are cached locally (`~/.google-calendar-mcp/` or similar).
+This opens a browser window for Google OAuth consent. After granting access, tokens are cached at `~/.config/google-calendar-mcp/tokens.json` (shared with the bot's `CalendarPoller`).
 
 For multiple accounts:
 ```bash
