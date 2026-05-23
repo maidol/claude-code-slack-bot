@@ -706,6 +706,9 @@ export class SlackHandler {
       await this.addAnchorReaction(sessionKey);
       await this.updateMessageReaction(sessionKey, statusEmoji);
 
+      // Start animated spinner immediately; verbs rotate during this phase
+      startHeartbeat(`${statusEmoji} *${statusText}*`, { phase: 'thinking', prefixEmoji: statusEmoji });
+
       // Show command hint on first message in a new thread
       const threadKey = `${channel}:${thread_ts || ts}`;
       if (isNewSession && !this.hintShownThreads.has(threadKey)) {
@@ -794,7 +797,7 @@ export class SlackHandler {
                   ts: statusMessageTs,
                   text: repeatStatusText,
                 }).catch(() => {});
-                startHeartbeat(repeatStatusText);
+                startHeartbeat(repeatStatusText, { phase: 'tool' });
               } else {
                 lastStatusText = newStatusText;
                 statusRepeatCount = 1;
@@ -803,7 +806,7 @@ export class SlackHandler {
                   ts: statusMessageTs,
                   text: newStatusText,
                 }).catch(() => {});
-                startHeartbeat(newStatusText);
+                startHeartbeat(newStatusText, { phase: 'tool' });
               }
             }
             await this.updateMessageReaction(sessionKey, toolEmoji);
