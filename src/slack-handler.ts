@@ -624,13 +624,20 @@ export class SlackHandler {
     let apiKeyCostInfo: { queryCost: number; totalCost: number } | null = null;
     let cliError = false;
 
-    // Heartbeat: keep status message alive with rotating spinner + elapsed time during long-running tool calls
+    // Heartbeat: brail spinner + elapsed seconds + cancel hint, refreshed every 2s.
+    // Disabled when LOADING_SPINNER_ENABLED=0 (single static chat.update on state change instead).
     let heartbeatTimer: NodeJS.Timeout | null = null;
     let heartbeatStart = 0;
     let heartbeatLabel = '';
     let heartbeatFrame = 0;
-    const SPINNER_FRAMES = ['🕐', '🕑', '🕒', '🕓', '🕔', '🕕', '🕖', '🕗', '🕘', '🕙', '🕚', '🕛'];
+    const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    const renderHeartbeat = (frame: number, sec: number): string => {
+      const spinner = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
+      const cancelHint = t('status.cancelHint', locale);
+      return `${heartbeatLabel} ${spinner} ${sec}s\n\n${cancelHint}`;
+    };
     const startHeartbeat = (label: string) => {
+      if (!config.loadingSpinner.enabled) return;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatLabel = label;
       heartbeatStart = Date.now();
@@ -638,14 +645,14 @@ export class SlackHandler {
       heartbeatTimer = setInterval(() => {
         if (!statusMessageTs) return;
         const sec = Math.floor((Date.now() - heartbeatStart) / 1000);
-        const spinner = SPINNER_FRAMES[heartbeatFrame % SPINNER_FRAMES.length];
+        const text = renderHeartbeat(heartbeatFrame, sec);
         heartbeatFrame++;
         this.app.client.chat.update({
           channel,
           ts: statusMessageTs,
-          text: `${heartbeatLabel} ${spinner} ${sec}s`,
+          text,
         }).catch(() => {});
-      }, 5000);
+      }, 2000);
     };
     const stopHeartbeat = () => {
       if (heartbeatTimer) {
