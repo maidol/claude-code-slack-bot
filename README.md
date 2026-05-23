@@ -504,6 +504,16 @@ Schedule automatic session starts to maximize Claude Pro/Max session windows.
 - Daily rotation (toggle button): for 2-account cross-schedules, swap accounts on alternating days (by day-of-year) to balance usage over 2 weeks
 - Persisted in `.schedule-config.json`
 
+### CLI Streaming Detail
+
+The bot invokes `claude -p --output-format stream-json` with `--include-partial-messages` enabled by default, so tool-use status (e.g. `🔍 Using Grep`) shows up in Slack as soon as the tool is announced — typically 1-3 seconds earlier than waiting for the full assistant event.
+
+```env
+CLI_INCLUDE_PARTIAL=1   # 0 to disable (default: enabled)
+```
+
+Set to `0` if you see Slack rate-limit warnings from `chat.update` during workloads with many parallel tool calls.
+
 ## Known Limitations & Customization Notes
 
 ### Holiday Calendar

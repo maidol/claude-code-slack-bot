@@ -337,6 +337,9 @@ export class CliHandler {
     tools?: string[];
   }): CliProcess {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
+    if (process.env.CLI_INCLUDE_PARTIAL !== '0') {
+      args.push('--include-partial-messages');
+    }
 
     // Permission mode
     if (opts.permissionMode === 'trust') {

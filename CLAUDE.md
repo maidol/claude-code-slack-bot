@@ -170,6 +170,7 @@ update.bat                    # Windows
 ### CLI 集成
 - 方式：`child_process.spawn('claude', ['-p', '--output-format', 'stream-json', ...])`
 - `CliProcess` 类：以 AsyncIterable<CliEvent> 模式流式读取 stdout
+- **部分消息流（`--include-partial-messages`）**：默认开启，`stream_event` 事件让"🔍 Using Grep"状态比纯 `assistant` 事件提前 1-3 秒出现。env `CLI_INCLUDE_PARTIAL=0` 可禁用（出现 Slack `chat.update` 限速时回退）。
 - **轻量模式选项**（`runQuery()` opts）：
   - `systemPrompt`：`--system-prompt`（替换默认提示词，节省 ~7K tokens）
   - `tools`：`--tools`（空数组则全禁用）
