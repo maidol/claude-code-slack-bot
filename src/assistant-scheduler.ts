@@ -127,7 +127,7 @@ export class AssistantScheduler {
   private costEntries: CostEntry[] = [];
 
   private logger = new Logger('AssistantScheduler');
-  private holidays = new Holidays('KR');
+  private holidays = new Holidays(process.env.HOLIDAYS_COUNTRY || 'KR');
 
   constructor(
     private sendMessage: (text: string, blocks?: unknown[]) => Promise<void>,
@@ -201,11 +201,11 @@ export class AssistantScheduler {
       }
       try {
         const result = await this.runSingleAnalysis(type);
-        if (result.timedOut) return `⏱️ 분석 타임아웃: ${type}`;
-        if (result.rateLimited) return `⚠️ 세션 리미트 초과: ${type}`;
-        return `✅ 분석 완료: ${type} ($${result.costUsd.toFixed(4)})`;
+        if (result.timedOut) return `⏱️ 分析超时：${type}`;
+        if (result.rateLimited) return `⚠️ 会话 limit 超出：${type}`;
+        return `✅ 分析完成：${type}（$${result.costUsd.toFixed(4)}）`;
       } catch (error) {
-        return `❌ 분석 실패 (${type}): ${(error as Error).message}`;
+        return `❌ 分析失败（${type}）：${(error as Error).message}`;
       }
     }
 
@@ -216,7 +216,7 @@ export class AssistantScheduler {
     if (defaultTypes.length === 0) return '⚠️ No types in default schedule.';
 
     await this.runAnalysisGroup(defaultSchedule, defaultTypes);
-    return '✅ 분석 실행 완료 — 결과는 위 메시지 참고';
+    return '✅ 分析执行完成 — 详情见上方消息';
   }
 
   /** Access CalendarPoller instance (for mute actions, etc.). */
@@ -281,7 +281,7 @@ export class AssistantScheduler {
         this.logger.warn('Assistant config not found', { path: this.configPath });
       }
     } catch (error) {
-      errorCollector.add('AssistantScheduler', `설정 파일 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('AssistantScheduler', `配置文件加载失败：${(error as Error).message}`);
       this.logger.error('Failed to load assistant config', error);
     }
   }
@@ -291,7 +291,7 @@ export class AssistantScheduler {
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
     } catch (error) {
-      errorCollector.add('AssistantScheduler', `설정 파일 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('AssistantScheduler', `配置文件保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save assistant config', error);
     }
   }
@@ -310,7 +310,7 @@ export class AssistantScheduler {
       });
       this.logger.info('Started config file watcher');
     } catch (error) {
-      errorCollector.add('AssistantScheduler', `설정 파일 감시 실패: ${(error as Error).message}`);
+      errorCollector.add('AssistantScheduler', `配置文件监视失败：${(error as Error).message}`);
       this.logger.warn('Failed to start config watcher', error);
     }
   }
@@ -336,7 +336,7 @@ export class AssistantScheduler {
         );
       }
     } catch (error) {
-      errorCollector.add('AssistantScheduler', `비용 데이터 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('AssistantScheduler', `费用数据加载失败：${(error as Error).message}`);
       this.logger.error('Failed to load cost data', error);
     }
   }
@@ -345,7 +345,7 @@ export class AssistantScheduler {
     try {
       fs.writeFileSync(COST_FILE, JSON.stringify({ entries: this.costEntries }, null, 2), 'utf-8');
     } catch (error) {
-      errorCollector.add('AssistantScheduler', `비용 데이터 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('AssistantScheduler', `费用数据保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save cost data', error);
     }
   }
@@ -364,9 +364,9 @@ export class AssistantScheduler {
 
   private formatCostLine(): string {
     const stats = this.getCostStats();
-    let line = `\n\n💰 *비용* — 오늘: $${stats.daily.toFixed(2)} | 이번 주: $${stats.weekly.toFixed(2)} | 이번 달: $${stats.monthly.toFixed(2)}`;
+    let line = `\n\n💰 *费用* — 今日：$${stats.daily.toFixed(2)} | 本周：$${stats.weekly.toFixed(2)} | 本月：$${stats.monthly.toFixed(2)}`;
     if (stats.analysisMonthly > 0) {
-      line += `\n📊 *분석* — 이번 주: $${stats.analysisWeekly.toFixed(2)} | 이번 달: $${stats.analysisMonthly.toFixed(2)}`;
+      line += `\n📊 *分析* — 本周：$${stats.analysisWeekly.toFixed(2)} | 本月：$${stats.analysisMonthly.toFixed(2)}`;
     }
     return line;
   }
@@ -446,21 +446,21 @@ export class AssistantScheduler {
         // Check rate limit in result text
         if (isRateLimitText(result.text)) {
           this.logger.warn('Briefing hit rate limit');
-          await this.sendMessage('⏳ 브리핑 실행 중 rate limit 도달. 다음 업무일에 재시도합니다.').catch(() => {});
+          await this.sendMessage('⏳ 简报执行时触发 rate limit。将在下一个工作日重试。').catch(() => {});
         } else {
           // Append error report + cost stats line
           await this.sendMessage(result.text + this.formatErrorReport() + this.formatCostLine());
 
           // If reports exist, add a button to view them
           if (this.hasUnreadReports()) {
-            await this.sendMessage('📄 대기 중인 보고서가 있습니다.', [{
+            await this.sendMessage('📄 有待查看的报告。', [{
               type: 'section',
-              text: { type: 'mrkdwn', text: '📄 대기 중인 보고서가 있습니다.' },
+              text: { type: 'mrkdwn', text: '📄 有待查看的报告。' },
             }, {
               type: 'actions',
               elements: [{
                 type: 'button',
-                text: { type: 'plain_text', text: '📄 보고서 확인' },
+                text: { type: 'plain_text', text: '📄 查看报告' },
                 action_id: 'briefing_view_reports',
               }],
             }]).catch(() => {});
@@ -470,7 +470,7 @@ export class AssistantScheduler {
         const msg = (error as Error).message || '';
         if (isRateLimitText(msg)) {
           this.logger.warn('Briefing hit rate limit');
-          await this.sendMessage('⏳ 브리핑 실행 중 rate limit 도달. 다음 업무일에 재시도합니다.').catch(() => {});
+          await this.sendMessage('⏳ 简报执行时触发 rate limit。将在下一个工作日重试。').catch(() => {});
         } else {
           this.logger.error('Briefing failed', error);
           await this.sendMessage('❌ Morning briefing failed. Check logs for details.').catch(() => {});
@@ -515,7 +515,7 @@ export class AssistantScheduler {
           type: 'actions',
           elements: [{
             type: 'button',
-            text: { type: 'plain_text', text: '📄 보고서 확인' },
+            text: { type: 'plain_text', text: '📄 查看报告' },
             action_id: 'briefing_view_reports',
           }],
         }]).catch(() => {});
@@ -523,7 +523,7 @@ export class AssistantScheduler {
     } catch (error) {
       const msg = (error as Error).message || '';
       if (isRateLimitText(msg)) {
-        await this.sendMessage('⏳ Catch-up 브리핑 중 rate limit 도달.').catch(() => {});
+        await this.sendMessage('⏳ Catch-up 简报触发 rate limit。').catch(() => {});
       } else {
         this.logger.error('Catch-up briefing failed', error);
       }
@@ -539,7 +539,7 @@ export class AssistantScheduler {
     if (excludeList && excludeList.length > 0) {
       prompt = prompt.replace(/\{excludeCalendars\}/g, excludeList.map(c => `\`${c}\``).join(', '));
     } else {
-      prompt = prompt.replace(/\{excludeCalendars\}/g, '(없음)');
+      prompt = prompt.replace(/\{excludeCalendars\}/g, '(无)');
     }
 
     // Monday: inject weekly summary prompt
@@ -564,12 +564,12 @@ export class AssistantScheduler {
 
     if (cache && cache.events.length >= 0) {
       const eventList = cache.events.map(e => {
-        const time = e.isAllDay ? '종일' : `${this.formatTimeFromISO(e.startTime)} ~ ${this.formatTimeFromISO(e.endTime)}`;
+        const time = e.isAllDay ? '全天' : `${this.formatTimeFromISO(e.startTime)} ~ ${this.formatTimeFromISO(e.endTime)}`;
         const loc = e.location ? ` — ${e.location}` : '';
         return `- ${time} ${e.title}${loc} _${e.calendarName}_`;
-      }).join('\n') || '(일정 없음)';
+      }).join('\n') || '(无日程)';
 
-      prompt += `\n\n## 오늘의 캘린더 데이터 (캐시)\n${eventList}\n\n위 데이터를 사용하세요. 캘린더 도구를 호출하지 마세요.`;
+      prompt += `\n\n## 今日日历数据（缓存）\n${eventList}\n\n请直接使用上述数据，不要调用日历工具。`;
       allowedTools = ['Read', 'Glob', 'Grep']; // No GCAL tools needed
     } else {
       // Fallback to MCP if no cache
@@ -639,7 +639,7 @@ export class AssistantScheduler {
       grouped.set(err.source, list);
     }
 
-    let report = '\n\n⚠️ *시스템 이슈*';
+    let report = '\n\n⚠️ *系统问题*';
     for (const [source, messages] of grouped) {
       // Deduplicate identical messages
       const unique = [...new Set(messages)];
@@ -767,15 +767,15 @@ export class AssistantScheduler {
               continue; // Retry with fresh session (same WebFetch may hang again on resume)
             }
             this.logger.error(`Analysis ${type} timed out after ${attempt + 1} attempts`);
-            errorCollector.add('AssistantScheduler', `분석 타임아웃 (${type}): ${maxRetries}회 재시도 후 포기`);
+            errorCollector.add('AssistantScheduler', `分析超时 (${type})：重试 ${maxRetries} 次后放弃`);
             timedOutTypes.push(type);
             break;
           }
 
           if (result.rateLimited) {
             this.logger.warn(`Analysis ${type} hit session limit`);
-            // Daily: no retry (data-sync 등)
-            // Weekly 또는 retryOnLimit=true: schedule retry
+            // Daily: no retry (data-sync etc.)
+            // Weekly or retryOnLimit=true: schedule retry
             const shouldRetry = !isDaily && typeConfig?.retryOnLimit !== false;
             if (shouldRetry && result.sessionId) {
               failedRetryTypes.push({ type, sessionId: result.sessionId });
@@ -796,7 +796,7 @@ export class AssistantScheduler {
             this.logger.warn(`Analysis ${type} failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying`, { error: msg });
             continue;
           }
-          errorCollector.add('AssistantScheduler', `분석 실행 실패 (${type}): ${msg}`);
+          errorCollector.add('AssistantScheduler', `分析执行失败 (${type})：${msg}`);
           this.logger.error(`Analysis failed for type: ${type}`, error);
           break;
         }
@@ -806,13 +806,13 @@ export class AssistantScheduler {
       if (failedRetryTypes.length > 0) break;
     }
 
-    const label = isDaily ? '야간 동기화' : '주간 분석';
-    const parts = [`📊 ${label} 완료: ${completedTypes.join(', ') || '(없음)'}`];
+    const label = isDaily ? '夜间同步' : '周期分析';
+    const parts = [`📊 ${label}完成：${completedTypes.join(', ') || '(无)'}`];
     if (timedOutTypes.length > 0) {
-      parts.push(`⏱️ 타임아웃: ${timedOutTypes.join(', ')}`);
+      parts.push(`⏱️ 超时：${timedOutTypes.join(', ')}`);
     }
     if (skippedTypes.length > 0) {
-      parts.push(`⏭️ cadence 스킵: ${skippedTypes.map(s => s.type).join(', ')}`);
+      parts.push(`⏭️ cadence 跳过：${skippedTypes.map(s => s.type).join(', ')}`);
     }
     await this.sendMessage(parts.join('\n')).catch(() => {});
 
@@ -827,7 +827,7 @@ export class AssistantScheduler {
         retryTime: retryTime.toISOString(),
       });
       await this.sendMessage(
-        `⏳ 세션 리미트 초과: ${retryTypes.join(', ')} → ${retryTime.toLocaleTimeString('ko-KR')} 재시도 예정`,
+        `⏳ 会话 limit 超出：${retryTypes.join(', ')} → 预计 ${retryTime.toLocaleTimeString('zh-CN')} 重试`,
       ).catch(() => {});
 
       const retryTimerKey = `retry-${schedule}`;
@@ -842,7 +842,7 @@ export class AssistantScheduler {
           }
         }
         await this.sendMessage(
-          `📊 재시도 완료: ${retryTypes.join(', ')}`,
+          `📊 重试完成：${retryTypes.join(', ')}`,
         ).catch(() => {});
       }, msUntil);
 
@@ -881,7 +881,7 @@ export class AssistantScheduler {
         workingDirectory: this.workingDir,
         permissionMode: 'default',
         allowedTools,
-        appendSystemPrompt: `CRITICAL: ${writablePaths.join(', ')} 디렉토리에만 새 파일 생성/수정. 그 외 파일 수정/삭제 금지.`,
+        appendSystemPrompt: `CRITICAL: 仅可在 ${writablePaths.join(', ')} 目录新建/修改文件。其他文件禁止修改/删除。`,
         env: { ASSISTANT_MODE: 'analysis', CLAUDE_SCHEDULED: '1' },
         resumeSessionId,
         skipMcp: true,

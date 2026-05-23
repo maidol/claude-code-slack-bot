@@ -187,7 +187,7 @@ export class CalendarPoller {
     const ms = nextHour.getTime() - now.getTime();
 
     this.logger.warn(`AI judgment paused until ${nextHour.toTimeString().slice(0, 5)} (rate limit)`);
-    errorCollector.add('CalendarPoller', 'AI 판단 rate limit — 다음 정시까지 일시 중지');
+    errorCollector.add('CalendarPoller', 'AI 判断触发 rate limit — 暂停至下一个整点');
 
     if (this.aiJudgmentResumeTimer) clearTimeout(this.aiJudgmentResumeTimer);
     this.aiJudgmentResumeTimer = setTimeout(() => {
@@ -209,7 +209,7 @@ export class CalendarPoller {
         return JSON.parse(fs.readFileSync(this.cacheFile, 'utf-8'));
       }
     } catch (error) {
-      errorCollector.add('CalendarPoller', `캐시 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `缓存加载失败：${(error as Error).message}`);
       this.logger.error('Failed to load cache', error);
     }
     return null;
@@ -239,7 +239,7 @@ export class CalendarPoller {
       }
       return JSON.parse(fs.readFileSync(this.tokensPath, 'utf-8'));
     } catch (error) {
-      errorCollector.add('CalendarPoller', `토큰 파일 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `令牌文件加载失败：${(error as Error).message}`);
       return null;
     }
   }
@@ -249,12 +249,12 @@ export class CalendarPoller {
       const data = JSON.parse(fs.readFileSync(this.credentialsPath, 'utf-8'));
       const installed = data.installed || data.web;
       if (!installed?.client_id || !installed?.client_secret) {
-        errorCollector.add('CalendarPoller', '자격 증명 파일에 client_id/client_secret 없음');
+        errorCollector.add('CalendarPoller', '凭据文件中缺少 client_id/client_secret');
         return null;
       }
       return { client_id: installed.client_id, client_secret: installed.client_secret };
     } catch (error) {
-      errorCollector.add('CalendarPoller', `자격 증명 파일 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `凭据文件加载失败：${(error as Error).message}`);
       return null;
     }
   }
@@ -262,7 +262,7 @@ export class CalendarPoller {
   private async getAccessToken(): Promise<string | null> {
     const tokens = this.loadTokens();
     if (!tokens?.normal) {
-      errorCollector.add('CalendarPoller', '토큰 파일 없음 또는 normal 키 없음');
+      errorCollector.add('CalendarPoller', '令牌文件不存在或缺少 normal 字段');
       return null;
     }
 
@@ -288,7 +288,7 @@ export class CalendarPoller {
       });
 
       if (!response.ok) {
-        errorCollector.add('CalendarPoller', `토큰 갱신 실패 (HTTP ${response.status})`);
+        errorCollector.add('CalendarPoller', `令牌刷新失败 (HTTP ${response.status})`);
         this.logger.error('Token refresh failed', { status: response.status });
         return null;
       }
@@ -301,10 +301,13 @@ export class CalendarPoller {
       }
 
       fs.writeFileSync(this.tokensPath, JSON.stringify(tokens, null, 2), 'utf-8');
+      if (process.platform !== 'win32') {
+        try { fs.chmodSync(this.tokensPath, 0o600); } catch { /* best effort */ }
+      }
       this.logger.info('Google Calendar token refreshed');
       return tokens.normal.access_token;
     } catch (error) {
-      errorCollector.add('CalendarPoller', `토큰 갱신 에러: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `令牌刷新错误：${(error as Error).message}`);
       this.logger.error('Token refresh error', error);
       return null;
     }
@@ -349,7 +352,7 @@ export class CalendarPoller {
           id: item.id as string,
           calendarId,
           calendarName,
-          title: (item.summary || '(제목 없음)') as string,
+          title: (item.summary || '(无标题)') as string,
           description: (item.description || '') as string,
           location: (item.location || '') as string,
           startTime: isAllDay ? `all-day:${start!.date}` : (start?.dateTime || ''),
@@ -376,7 +379,7 @@ export class CalendarPoller {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!response.ok) {
-        errorCollector.add('CalendarPoller', `캘린더 목록 조회 실패 (HTTP ${response.status})`);
+        errorCollector.add('CalendarPoller', `日历列表查询失败 (HTTP ${response.status})`);
         return [];
       }
 
@@ -400,7 +403,7 @@ export class CalendarPoller {
 
       return calendars;
     } catch (error) {
-      errorCollector.add('CalendarPoller', '캘린더 목록 조회 실패');
+      errorCollector.add('CalendarPoller', '日历列表查询失败');
       this.logger.warn('Calendar list fetch failed', error);
       return [];
     }
@@ -429,7 +432,7 @@ export class CalendarPoller {
       } else {
         const cal = calendars[i];
         const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-        errorCollector.add('CalendarPoller', `캘린더 조회 실패 (${cal.name}): ${reason}`);
+        errorCollector.add('CalendarPoller', `日历查询失败 (${cal.name})：${reason}`);
         this.logger.warn('Calendar fetch failed', { calendarId: cal.id, calendarName: cal.name, reason });
       }
     }
@@ -465,7 +468,7 @@ export class CalendarPoller {
     try {
       fs.writeFileSync(this.cacheFile, JSON.stringify(cache, null, 2), 'utf-8');
     } catch (error) {
-      errorCollector.add('CalendarPoller', `캐시 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `缓存保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save cache', error);
     }
   }
@@ -549,7 +552,7 @@ export class CalendarPoller {
 
     const promptPath = path.join(this.promptsDir, 'calendar-judgment.md');
     if (!fs.existsSync(promptPath)) {
-      errorCollector.add('CalendarPoller', 'calendar-judgment.md 프롬프트 파일 없음');
+      errorCollector.add('CalendarPoller', '找不到 calendar-judgment.md 提示词文件');
       return [];
     }
 
@@ -562,9 +565,9 @@ export class CalendarPoller {
 
     const formatEvents = (events: GCalEvent[]) =>
       events.length === 0
-        ? '(없음)'
+        ? '(无)'
         : events.map(e => {
-            let line = `- [${e.id}] \`${e.startTime}\` ${e.title} — ${e.location || '(장소 없음)'} _${e.calendarName}_`;
+            let line = `- [${e.id}] \`${e.startTime}\` ${e.title} — ${e.location || '(无地点)'} _${e.calendarName}_`;
             if (e.description) line += ` | desc: ${e.description.substring(0, 200)}`;
             return line;
           }).join('\n');
@@ -573,21 +576,21 @@ export class CalendarPoller {
     prompt = prompt.replace(/\{removedEvents\}/g, formatEvents(diff.removed));
 
     const modifiedText = diff.modified.length === 0
-      ? '(없음)'
+      ? '(无)'
       : diff.modified.map(m => {
           const changes = m.changes.map(c => {
-            if (c === 'time') return `시간: ${m.previous.startTime} → ${m.current.startTime}`;
-            if (c === 'location') return `장소: ${m.previous.location || '없음'} → ${m.current.location || '없음'}`;
+            if (c === 'time') return `时间：${m.previous.startTime} → ${m.current.startTime}`;
+            if (c === 'location') return `地点：${m.previous.location || '无'} → ${m.current.location || '无'}`;
             return c;
           }).join(', ');
-          return `- [${m.current.id}] ${m.current.title} — 변경: ${changes}`;
+          return `- [${m.current.id}] ${m.current.title} — 变更：${changes}`;
         }).join('\n');
     prompt = prompt.replace(/\{modifiedEvents\}/g, modifiedText);
 
     // Inject existing notifications for dedup
     const existing = this.loadNotifications().filter(n => !n.delivered);
     const existingText = existing.length === 0
-      ? '(없음)'
+      ? '(无)'
       : existing.map(n => `- [${n.eventId}] type=${n.type} notifyAt=${n.notifyAt} "${n.message}"`).join('\n');
     prompt = prompt.replace(/\{existingNotifications\}/g, existingText);
 
@@ -626,7 +629,7 @@ export class CalendarPoller {
         this.pauseAiJudgment();
         return [];
       }
-      errorCollector.add('CalendarPoller', `AI 판단 실패: ${msg}`);
+      errorCollector.add('CalendarPoller', `AI 判断失败：${msg}`);
       this.logger.error('AI judgment failed', error);
       return [];
     }
@@ -664,7 +667,7 @@ export class CalendarPoller {
           createdAt: now,
         }));
     } catch (error) {
-      errorCollector.add('CalendarPoller', `AI 판단 응답 파싱 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `AI 判断响应解析失败：${(error as Error).message}`);
       this.logger.error('Failed to parse AI judgment response', error);
       return [];
     }
@@ -726,7 +729,7 @@ export class CalendarPoller {
     try {
       fs.writeFileSync(this.notificationsFile, JSON.stringify(cleaned, null, 2), 'utf-8');
     } catch (error) {
-      errorCollector.add('CalendarPoller', `알림 큐 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `通知队列保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save notifications', error);
     }
   }
@@ -835,7 +838,7 @@ export class CalendarPoller {
             const docPath = path.join(workingDir, pathMatch[1]);
             try {
               const content = fs.readFileSync(docPath, 'utf-8');
-              const summaryMatch = content.match(/## 요약\n([\s\S]*?)(?=\n## |$)/);
+              const summaryMatch = content.match(/## (?:摘要|Summary)\n([\s\S]*?)(?=\n## |$)/);
               if (summaryMatch) {
                 notification.message += '\n\n' + summaryMatch[1].trim();
               }
@@ -851,7 +854,7 @@ export class CalendarPoller {
             type: 'actions',
             elements: [{
               type: 'button',
-              text: { type: 'plain_text', text: '🔇 이 일정 알림 끄기' },
+              text: { type: 'plain_text', text: '🔇 关闭此事件提醒' },
               action_id: 'calendar_mute_event',
               value: baseId,
             }],
@@ -893,8 +896,8 @@ export class CalendarPoller {
       this.consecutiveAuthFailures++;
       if (this.consecutiveAuthFailures >= 3 && !this.paused) {
         this.paused = true;
-        errorCollector.add('CalendarPoller', '인증 연속 3회 실패 — 폴링 일시 중지');
-        await this.sendMessage('⚠️ 캘린더 인증 갱신 필요 — 리마인더 일시 중지됨').catch(() => {});
+        errorCollector.add('CalendarPoller', '认证连续 3 次失败 — 暂停轮询');
+        await this.sendMessage('⚠️ 日历认证需要更新 — 提醒已暂停').catch(() => {});
       }
       return;
     }
@@ -909,7 +912,7 @@ export class CalendarPoller {
     try {
       currentEvents = await this.fetchAllEvents(accessToken);
     } catch (error) {
-      errorCollector.add('CalendarPoller', `이벤트 조회 실패: ${(error as Error).message}`);
+      errorCollector.add('CalendarPoller', `事件查询失败：${(error as Error).message}`);
       this.logger.error('Failed to fetch events', error);
       return;
     }

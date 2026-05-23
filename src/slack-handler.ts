@@ -115,6 +115,9 @@ export class SlackHandler {
   // System memory watchdog
   private memoryWatchdog: ProcessMemoryWatchdog | null = null;
 
+  // Long-running timers, cleared on shutdown()
+  private cleanupTimers: ReturnType<typeof setInterval>[] = [];
+
   constructor(app: App, cliHandler: CliHandler, mcpManager: McpManager, reportServer?: ReportServer) {
     this.app = app;
     this.cliHandler = cliHandler;
@@ -182,7 +185,7 @@ export class SlackHandler {
     try {
       const response = await this.app.client.users.info({ user: userId, include_locale: true });
       const slackLocale = (response.user as any)?.locale || 'en-US';
-      const locale: Locale = slackLocale.startsWith('ko') ? 'ko' : 'en';
+      const locale: Locale = slackLocale.startsWith('zh') ? 'zh' : 'en';
       this.userLocales.set(userId, locale);
       return locale;
     } catch {
@@ -327,15 +330,15 @@ export class SlackHandler {
         await say({ text: result.text, thread_ts: thread_ts || ts });
         if (result.hasReports) {
           await say({
-            text: '📄 대기 중인 보고서가 있습니다.',
+            text: '📄 有待查看的报告。',
             blocks: [{
               type: 'section',
-              text: { type: 'mrkdwn', text: '📄 대기 중인 보고서가 있습니다.' },
+              text: { type: 'mrkdwn', text: '📄 有待查看的报告。' },
             }, {
               type: 'actions',
               elements: [{
                 type: 'button',
-                text: { type: 'plain_text', text: '📄 보고서 확인' },
+                text: { type: 'plain_text', text: '📄 查看报告' },
                 action_id: 'briefing_view_reports',
               }],
             }],
@@ -471,7 +474,7 @@ export class SlackHandler {
     // Sessions command
     if (text && this.isSessionsCommand(text)) {
       // -sessions all → cross-project picker
-      if (/^-sessions?\s+(all|전체)$/i.test(text.trim())) {
+      if (/^-sessions?\s+(all|全部)$/i.test(text.trim())) {
         await this.showSessionPicker(channel, thread_ts || ts, user, say, locale);
         return;
       }
@@ -1433,33 +1436,33 @@ export class SlackHandler {
   // --- Command parsers ---
 
   private isStopCommand(text: string): boolean {
-    return /^-(stop|cancel|중단)$/i.test(text.trim());
+    return /^-(stop|cancel|中断)$/i.test(text.trim());
   }
 
   private isHelpCommand(text: string): boolean {
-    return /^-?(help|commands|도움말)(\?)?$/i.test(text.trim());
+    return /^-?(help|commands|帮助)(\?)?$/i.test(text.trim());
   }
 
   private isResetCommand(text: string): boolean {
-    return /^-(reset|새로시작)$|^초기화$/i.test(text.trim());
+    return /^-(reset|重新开始)$|^重置$/i.test(text.trim());
   }
 
   private isDefaultModeCommand(text: string): boolean {
-    return /^-(?:default|d)$|^기본$/i.test(text.trim());
+    return /^-(?:default|d)$|^默认$/i.test(text.trim());
   }
 
   private isSafeCommand(text: string): boolean {
-    return /^-safe$|^안전$/i.test(text.trim());
+    return /^-safe$|^安全$/i.test(text.trim());
   }
 
   private isTrustCommand(text: string): boolean {
-    return /^-trust$|^신뢰$/i.test(text.trim());
+    return /^-trust$|^信任$/i.test(text.trim());
   }
 
   private parseModelCommand(text: string): string | null {
     const trimmed = text.trim();
-    // -model <name> | -m <name> | 모델 <name>  (empty arg = show current)
-    const longMatch = trimmed.match(/^-(?:model|m)(?:\s+(\S+))?$|^모델(?:\s+(\S+))?$/i);
+    // -model <name> | -m <name> | 模型 <name>  (empty arg = show current)
+    const longMatch = trimmed.match(/^-(?:model|m)(?:\s+(\S+))?$|^模型(?:\s+(\S+))?$/i);
     if (longMatch) return longMatch[1] || longMatch[2] || '';
     // Short alias commands: -opus | -o | -sonnet | -s | -haiku | -h
     const shortMatch = trimmed.match(/^-(opus|sonnet|haiku|o|s|h)$/i);
@@ -1486,19 +1489,19 @@ export class SlackHandler {
   }
 
   private isCostCommand(text: string): boolean {
-    return /^-cost$|^비용$/i.test(text.trim());
+    return /^-cost$|^费用$/i.test(text.trim());
   }
 
   private isVersionCommand(text: string): boolean {
-    return /^`?-(?:version|v)`?$|^버전$/i.test(text.trim());
+    return /^`?-(?:version|v)`?$|^版本$/i.test(text.trim());
   }
 
   private isSessionsCommand(text: string): boolean {
-    return /^-(?:sessions?|s)(\s+(list|all|전체))?$|^세션(\s+(all|전체))?$/i.test(text.trim());
+    return /^-(?:sessions?|s)(\s+(list|all|全部))?$|^会话(\s+(all|全部))?$/i.test(text.trim());
   }
 
   private parsePlanCommand(text: string): { prompt: string } | null {
-    const match = text.trim().match(/^-plan\s+(.+)$|^계획\s+(.+)$/is);
+    const match = text.trim().match(/^-plan\s+(.+)$|^计划\s+(.+)$/is);
     if (match) return { prompt: (match[1] || match[2]).trim() };
     return null;
   }
@@ -1518,14 +1521,14 @@ export class SlackHandler {
       return { mode: 'uuid', resumeOptions: { resumeSessionId: resumeUuidMatch[1] }, prompt: resumeUuidMatch[2]?.trim() || undefined };
     }
 
-    // -r, -resume, resume, continue, keep going, 계속, 계속하자 (no args) → session picker
-    if (/^-(r|resume)$/i.test(trimmed) || /^(resume|continue|keep\s*going|계속(하자)?)$/i.test(trimmed)) {
+    // -r, -resume, resume, continue, keep going, 继续 (no args) → session picker
+    if (/^-(r|resume)$/i.test(trimmed) || /^(resume|continue|keep\s*going|继续)$/i.test(trimmed)) {
       return { mode: 'picker' };
     }
 
     // Natural language resume: short messages (≤30 chars) with resume-intent keywords
     if (trimmed.length <= 30) {
-      const resumePatterns = /^(let'?s?\s*go|go\s*ahead|carry\s*on|pick\s*up|let'?s?\s*work|go|gg|start|일하자|하자|이어서|다시|시작|진행|작업|고고|ㄱㄱ)!?\.?$/i;
+      const resumePatterns = /^(let'?s?\s*go|go\s*ahead|carry\s*on|pick\s*up|let'?s?\s*work|go|gg|start|工作|开干|继续|再来|进行|干活|冲冲|gogogo)!?\.?$/i;
       if (resumePatterns.test(trimmed)) {
         return { mode: 'picker' };
       }
@@ -1537,13 +1540,13 @@ export class SlackHandler {
   // --- Schedule command ---
 
   private isScheduleCommand(text: string): boolean {
-    return /^`?-(?:schedule|sc)`?(?:\s|$)|^스케줄/i.test(text.trim());
+    return /^`?-(?:schedule|sc)`?(?:\s|$)|^调度/i.test(text.trim());
   }
 
   // --- Assistant commands ---
 
   private isBriefingCommand(text: string): boolean {
-    return /^`?-(?:briefing|br)`?$/i.test(text.trim()) || /^브리핑$/i.test(text.trim());
+    return /^`?-(?:briefing|br)`?$/i.test(text.trim()) || /^简报$/i.test(text.trim());
   }
 
   private isReportCommand(text: string): boolean {
@@ -1556,11 +1559,11 @@ export class SlackHandler {
   }
 
   private isAnalyzeCommand(text: string): boolean {
-    return /^`?-(?:analyze|an)`?(?:\s|$)/i.test(text.trim()) || /^분석(?:\s|$)/i.test(text.trim());
+    return /^`?-(?:analyze|an)`?(?:\s|$)/i.test(text.trim()) || /^分析(?:\s|$)/i.test(text.trim());
   }
 
   private parseAnalyzeCommand(text: string): { type?: string } {
-    const match = text.trim().match(/^(?:`?-(?:analyze|an)`?|분석)\s*(.*)$/i);
+    const match = text.trim().match(/^(?:`?-(?:analyze|an)`?|分析)\s*(.*)$/i);
     return { type: match?.[1]?.trim() || undefined };
   }
 
@@ -1820,7 +1823,7 @@ export class SlackHandler {
   }
 
   private async runScheduledGreeting(channel: string, userId: string, time: string, account: string): Promise<void> {
-    const locale = await this.getUserLocale(userId).catch(() => 'ko' as Locale);
+    const locale = await this.getUserLocale(userId).catch(() => 'zh' as Locale);
 
     // Skip if account is not configured (unset)
     const accountInfo = this.accountManager.getAccountList().find(a => a.id === account);
@@ -2027,20 +2030,23 @@ export class SlackHandler {
         data[userId] = { apiKey, savedAt: new Date().toISOString() };
       }
       fs.writeFileSync(this.API_KEYS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      if (process.platform !== 'win32') {
+        try { fs.chmodSync(this.API_KEYS_FILE, 0o600); } catch { /* best effort */ }
+      }
     } catch (error) {
       this.logger.error('Failed to save API keys to disk', error);
     }
   }
 
   private isApiKeyCommand(text: string): boolean {
-    return /^`?-(?:apikey|key)`?$|^키$/i.test(text.trim());
+    return /^`?-(?:apikey|key)`?$|^密钥$/i.test(text.trim());
   }
 
   private parseLimitCommand(text: string): { action: 'status' } | { action: 'set'; amount: number } | { action: 'clear' } | null {
     const trimmed = text.trim();
-    if (/^`?-limit`?$|^한도$/i.test(trimmed)) return { action: 'status' };
-    if (/^`?-limit`?\s+(clear|off|reset)`?$|^한도\s+(?:clear|초기화)$/i.test(trimmed)) return { action: 'clear' };
-    const setMatch = trimmed.match(/^`?-limit`?\s+([\d.]+)`?$|^한도\s+([\d.]+)$/i);
+    if (/^`?-limit`?$|^限额$/i.test(trimmed)) return { action: 'status' };
+    if (/^`?-limit`?\s+(clear|off|reset)`?$|^限额\s+(?:clear|清除)$/i.test(trimmed)) return { action: 'clear' };
+    const setMatch = trimmed.match(/^`?-limit`?\s+([\d.]+)`?$|^限额\s+([\d.]+)$/i);
     if (setMatch) {
       const amount = parseFloat(setMatch[1] || setMatch[2]);
       if (!isNaN(amount) && amount > 0) return { action: 'set', amount };
@@ -2076,19 +2082,19 @@ export class SlackHandler {
     const active = this.apiKeyActive.get(channel);
     const configuredLimit = this.channelApiKeyLimits.get(channel);
     if (active) {
-      const limitStr = active.limit !== undefined ? `$${active.limit.toFixed(2)}` : (locale === 'ko' ? '없음' : 'none');
-      let msg = `💰 *${locale === 'ko' ? 'API 키 모드 활성 중' : 'API key mode active'}*\n`;
-      msg += `• ${locale === 'ko' ? '이번 세션 사용' : 'Spent'}: $${active.totalCost.toFixed(4)}\n`;
-      msg += `• ${locale === 'ko' ? '한도' : 'Limit'}: ${limitStr}\n`;
-      msg += locale === 'ko'
-        ? '_`-limit <금액>`으로 변경, `-limit clear`로 초기화_'
+      const limitStr = active.limit !== undefined ? `$${active.limit.toFixed(2)}` : (locale === 'zh' ? '无' : 'none');
+      let msg = `💰 *${locale === 'zh' ? 'API 密钥模式已启用' : 'API key mode active'}*\n`;
+      msg += `• ${locale === 'zh' ? '本次会话已用' : 'Spent'}: $${active.totalCost.toFixed(4)}\n`;
+      msg += `• ${locale === 'zh' ? '限额' : 'Limit'}: ${limitStr}\n`;
+      msg += locale === 'zh'
+        ? '_使用 `-limit <金额>` 修改、`-limit clear` 清除_'
         : '_Use `-limit <amount>` to change, `-limit clear` to remove_';
       await say({ text: msg, thread_ts: threadTs });
     } else if (configuredLimit !== undefined) {
-      let msg = `ℹ️ ${locale === 'ko' ? 'API 키 모드 비활성.' : 'API key mode not active.'}\n`;
-      msg += `• ${locale === 'ko' ? '설정된 한도' : 'Configured limit'}: $${configuredLimit.toFixed(2)}\n`;
-      msg += locale === 'ko'
-        ? '_Rate limit 시 API 키 모드 전환 시 자동 적용됩니다._'
+      let msg = `ℹ️ ${locale === 'zh' ? 'API 密钥模式未启用。' : 'API key mode not active.'}\n`;
+      msg += `• ${locale === 'zh' ? '已设置限额' : 'Configured limit'}: $${configuredLimit.toFixed(2)}\n`;
+      msg += locale === 'zh'
+        ? '_Rate limit 时切换到 API 密钥模式会自动应用此限额。_'
         : '_Will apply automatically when API key mode is activated._';
       await say({ text: msg, thread_ts: threadTs });
     } else {
@@ -2125,12 +2131,12 @@ export class SlackHandler {
   // --- Account management commands ---
 
   private isAccountCommand(text: string): boolean {
-    return /^`?-(?:account|ac)(`?\s*.*)?$|^계정(\s.*)?$/i.test(text.trim());
+    return /^`?-(?:account|ac)(`?\s*.*)?$|^账号(\s.*)?$/i.test(text.trim());
   }
 
   private async handleAccountCommand(text: string, _channel: string, threadTs: string | undefined, locale: Locale, say: any): Promise<void> {
     const trimmed = text.trim().replace(/^`|`$/g, '');
-    const argMatch = trimmed.match(/^-(?:account|ac)\s+(.+)$/i) || trimmed.match(/^계정\s+(.+)$/);
+    const argMatch = trimmed.match(/^-(?:account|ac)\s+(.+)$/i) || trimmed.match(/^账号\s+(.+)$/);
     const raw = argMatch ? argMatch[1].trim().toLowerCase() : '';
 
     // -account <id> — direct switch (always run switchTo to re-sync .credentials.json)
@@ -2517,14 +2523,14 @@ export class SlackHandler {
 
     // --- Interactive button handlers ---
 
-    // Briefing: "보고서 확인" button — trigger -rp command
+    // Briefing: "查看报告" button — trigger -rp command
     this.app.action('briefing_view_reports', async ({ ack, body }) => {
       await ack();
       const channel = (body as any).channel?.id || (body as any).container?.channel_id;
       const threadTs = (body as any).message?.ts;
       const userId = (body as any).user?.id;
       if (!channel) return;
-      const locale = await this.getUserLocale(userId).catch(() => 'ko' as Locale);
+      const locale = await this.getUserLocale(userId).catch(() => 'zh' as Locale);
       await this.handleReportCommand(undefined, channel, threadTs, locale, async (msg: any) => {
         await this.app.client.chat.postMessage({ channel, ...msg });
       });
@@ -3305,7 +3311,7 @@ export class SlackHandler {
       try {
         await respond({
           replace_original: true,
-          text: `🔇 *${title}* — 이 일정의 알림을 껐습니다.`,
+          text: `🔇 *${title}* — 已关闭此事件的提醒。`,
         });
       } catch (error) {
         this.logger.error('Failed to respond to mute action', error);
@@ -3313,17 +3319,17 @@ export class SlackHandler {
     });
 
     // Cleanup inactive sessions periodically
-    setInterval(() => {
+    this.cleanupTimers.push(setInterval(() => {
       this.logger.debug('Running session cleanup');
       this.cliHandler.cleanupInactiveSessions(24 * 60 * 60 * 1000); // 24 hours
-    }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000));
 
     // Periodic token health check (every 1 hour)
-    setInterval(() => {
+    this.cleanupTimers.push(setInterval(() => {
       this.checkTokenHealth().catch(err =>
         this.logger.error('Token health check failed', err),
       );
-    }, 60 * 60 * 1000);
+    }, 60 * 60 * 1000));
     // Run once at startup (after 30 seconds to let Slack connect)
     setTimeout(() => {
       this.checkTokenHealth().catch(err =>
@@ -3373,7 +3379,7 @@ export class SlackHandler {
     const scheduleConfig = this.scheduleManager.getConfig();
     if (!scheduleConfig) return; // No schedule = no one to notify
 
-    const locale = await this.getUserLocale(scheduleConfig.userId).catch(() => 'ko' as Locale);
+    const locale = await this.getUserLocale(scheduleConfig.userId).catch(() => 'zh' as Locale);
     const accountLabels = newUnhealthy.map(a => `\`${a.id}\` (${a.email || '?'})`).join(', ');
     const message = t('account.tokenExpired', locale, { accounts: accountLabels });
 
@@ -3386,5 +3392,14 @@ export class SlackHandler {
       this.notifiedUnhealthyAccounts.add(a.id);
     }
     this.logger.info('Sent token expiry notification', { accounts: newUnhealthy.map(a => a.id) });
+  }
+
+  /** Graceful shutdown — clear timers and stop file watchers. Called on SIGTERM/SIGINT. */
+  shutdown(): void {
+    this.logger.info('SlackHandler shutdown — clearing timers');
+    for (const t of this.cleanupTimers) clearInterval(t);
+    this.cleanupTimers = [];
+    try { this.accountManager.stopWatcher(); } catch { /* best effort */ }
+    try { this.memoryWatchdog?.stop?.(); } catch { /* best effort */ }
   }
 }

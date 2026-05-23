@@ -71,6 +71,16 @@ async function start() {
       mcpServerNames: mcpConfig ? Object.keys(mcpConfig.mcpServers) : [],
     });
 
+    // Graceful shutdown: clear timers, stop watchers, close Slack connection
+    const gracefulShutdown = async (signal: string) => {
+      logger.info(`Received ${signal} — shutting down gracefully`);
+      try { slackHandler.shutdown(); } catch (err) { logger.warn('slackHandler.shutdown threw', err); }
+      try { await app.stop(); } catch (err) { logger.warn('app.stop threw', err); }
+      process.exit(0);
+    };
+    process.on('SIGTERM', () => { gracefulShutdown('SIGTERM'); });
+    process.on('SIGINT', () => { gracefulShutdown('SIGINT'); });
+
     // Fire-and-forget update check (no startup delay)
     checkForUpdates().then((result) => {
       if (result && result.behindBy > 0) {

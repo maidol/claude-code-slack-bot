@@ -34,7 +34,7 @@ export class ScheduleManager {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly configFile: string;
   private logger = new Logger('ScheduleManager');
-  private holidays = new Holidays('KR');
+  private holidays = new Holidays(process.env.HOLIDAYS_COUNTRY || 'KR');
 
   // Jitter range: actual fire time = scheduled time + random(0~10 min)
   private static readonly MIN_JITTER_MS = 0;
@@ -74,7 +74,7 @@ export class ScheduleManager {
         this.logger.info('Loaded schedule config', { entries: this.config.entries, channel: this.config.channel });
       }
     } catch (error) {
-      errorCollector.add('ScheduleManager', `설정 파일 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('ScheduleManager', `配置文件加载失败：${(error as Error).message}`);
       this.logger.error('Failed to load schedule config', error);
     }
   }
@@ -85,7 +85,7 @@ export class ScheduleManager {
         fs.writeFileSync(this.configFile, JSON.stringify(this.config, null, 2), 'utf-8');
       }
     } catch (error) {
-      errorCollector.add('ScheduleManager', `설정 파일 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('ScheduleManager', `配置文件保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save schedule config', error);
     }
   }
@@ -307,7 +307,7 @@ export class ScheduleManager {
       try {
         callback(channel, userId, time, effectiveAccount);
       } catch (error) {
-        errorCollector.add('ScheduleManager', `스케줄 콜백 에러 (${time}): ${(error as Error).message}`);
+        errorCollector.add('ScheduleManager', `调度回调错误 (${time})：${(error as Error).message}`);
         this.logger.error(`Error in scheduled callback for ${time}`, error);
       }
 
@@ -376,7 +376,7 @@ export class ScheduleManager {
         try {
           callback(currentCfg.channel, currentCfg.userId, time, effectiveAccount);
         } catch (error) {
-          errorCollector.add('ScheduleManager', `팔로우업 콜백 에러 (${time}): ${(error as Error).message}`);
+          errorCollector.add('ScheduleManager', `跟进回调错误 (${time})：${(error as Error).message}`);
           this.logger.error(`Error in follow-up callback for ${time}`, error);
         }
       }

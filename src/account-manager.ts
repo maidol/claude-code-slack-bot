@@ -33,6 +33,12 @@ const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 const TOKEN_EXPIRY_BUFFER_MS = 90 * 60 * 1000; // Refresh 90 minutes before expiry (> 1h health check interval)
 
+/** Restrict a credential file to user-only read/write on POSIX (no-op on Windows). */
+function chmodPrivate(filePath: string): void {
+  if (process.platform === 'win32') return;
+  try { fs.chmodSync(filePath, 0o600); } catch { /* best effort */ }
+}
+
 export class AccountManager {
   private logger = new Logger('AccountManager');
   private readonly claudeDir = path.join(os.homedir(), '.claude');
@@ -41,6 +47,8 @@ export class AccountManager {
 
   private currentAccount: AccountId = 'account-1';
   private watchDebounceTimer?: ReturnType<typeof setTimeout>;
+  private watcherActive = false;
+  private refreshInFlight: Map<AccountId, Promise<OAuthTokenData | null>> = new Map();
 
   constructor() {
     this.credentialsFile = path.join(this.claudeDir, '.credentials.json');
@@ -62,9 +70,22 @@ export class AccountManager {
           this.syncFromCredentialsFile();
         }, 1000);
       });
+      this.watcherActive = true;
       this.logger.info('Started credentials file watcher');
     } catch (error) {
       this.logger.warn('Failed to start credentials watcher', error);
+    }
+  }
+
+  /** Stop the credentials file watcher (called on shutdown). */
+  stopWatcher(): void {
+    if (this.watcherActive) {
+      try { fs.unwatchFile(this.credentialsFile); } catch { /* best effort */ }
+      this.watcherActive = false;
+    }
+    if (this.watchDebounceTimer) {
+      clearTimeout(this.watchDebounceTimer);
+      this.watchDebounceTimer = undefined;
     }
   }
 
@@ -88,8 +109,9 @@ export class AccountManager {
   private saveAccounts(data: AccountsFileData): void {
     try {
       fs.writeFileSync(this.accountsFile, JSON.stringify(data, null, 2), 'utf-8');
+      chmodPrivate(this.accountsFile);
     } catch (error) {
-      errorCollector.add('AccountManager', `계정 파일 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('AccountManager', `账号文件保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save accounts file', error);
     }
   }
@@ -109,7 +131,7 @@ export class AccountManager {
         body: body.toString(),
       });
       if (!response.ok) {
-        errorCollector.add('AccountManager', `토큰 갱신 실패 (HTTP ${response.status})`);
+        errorCollector.add('AccountManager', `令牌刷新失败 (HTTP ${response.status})`);
         this.logger.error('Token refresh failed', { status: response.status, statusText: response.statusText });
         return null;
       }
@@ -120,10 +142,25 @@ export class AccountManager {
         expiresAt: Date.now() + (result.expires_in as number) * 1000,
       };
     } catch (error) {
-      errorCollector.add('AccountManager', `토큰 갱신 에러: ${(error as Error).message}`);
+      errorCollector.add('AccountManager', `令牌刷新错误：${(error as Error).message}`);
       this.logger.error('Token refresh error', error);
       return null;
     }
+  }
+
+  /**
+   * Dedup concurrent refresh calls for the same account.
+   * Without this, two concurrent getAccessToken() calls would each fire a refresh
+   * → OAuth rotation invalidates the loser's refresh token.
+   */
+  private refreshOnce(accountId: AccountId, refreshToken: string): Promise<OAuthTokenData | null> {
+    let promise = this.refreshInFlight.get(accountId);
+    if (!promise) {
+      promise = this.refreshOAuthToken(refreshToken)
+        .finally(() => this.refreshInFlight.delete(accountId));
+      this.refreshInFlight.set(accountId, promise);
+    }
+    return promise;
   }
 
   // --- Public API ---
@@ -204,7 +241,7 @@ export class AccountManager {
         return null;
       }
       this.logger.info('Token expired, refreshing', { accountId });
-      const refreshed = await this.refreshOAuthToken(tokenData.refreshToken);
+      const refreshed = await this.refreshOnce(accountId, tokenData.refreshToken);
       if (refreshed) {
         data.accounts[accountId] = { ...tokenData, ...refreshed };
         this.saveAccounts(data);
@@ -251,7 +288,7 @@ export class AccountManager {
           unhealthy.push({ id, email: tokenData.email });
           continue;
         }
-        const refreshed = await this.refreshOAuthToken(tokenData.refreshToken);
+        const refreshed = await this.refreshOnce(id, tokenData.refreshToken);
         if (refreshed) {
           data.accounts[id] = { ...tokenData, ...refreshed };
           this.saveAccounts(data);
@@ -325,10 +362,11 @@ export class AccountManager {
       // Atomic write: temp file + rename to prevent JSON corruption
       const tmpFile = this.credentialsFile + '.tmp';
       fs.writeFileSync(tmpFile, JSON.stringify(credData, null, 2), 'utf-8');
+      chmodPrivate(tmpFile);
       fs.renameSync(tmpFile, this.credentialsFile);
       this.logger.info('Synced credentials file', { accountId });
     } catch (error) {
-      errorCollector.add('AccountManager', `자격 증명 파일 동기화 실패: ${(error as Error).message}`);
+      errorCollector.add('AccountManager', `凭据文件同步失败：${(error as Error).message}`);
       this.logger.error('Failed to sync credentials file (non-fatal)', error);
     }
   }
@@ -345,6 +383,7 @@ export class AccountManager {
       claudeJson.oauthAccount = tokenData.oauthAccount;
       const tmpFile = claudeJsonPath + '.tmp';
       fs.writeFileSync(tmpFile, JSON.stringify(claudeJson, null, 2), 'utf-8');
+      chmodPrivate(tmpFile);
       fs.renameSync(tmpFile, claudeJsonPath);
     } catch (error) {
       this.logger.error('Failed to sync claude.json (non-fatal)', error);
@@ -413,7 +452,7 @@ export class AccountManager {
       if (msg.includes('ENOENT')) {
         this.logger.debug('Credentials file not found (non-fatal)', { path: this.credentialsFile });
       } else {
-        errorCollector.add('AccountManager', `자격 증명 역동기화 실패: ${msg}`);
+        errorCollector.add('AccountManager', `凭据反向同步失败：${msg}`);
         this.logger.error('Failed to sync from credentials file (non-fatal)', error);
       }
     }
@@ -458,7 +497,7 @@ export class AccountManager {
 
       return true;
     } catch (error) {
-      errorCollector.add('AccountManager', `계정 슬롯 캡처 실패: ${(error as Error).message}`);
+      errorCollector.add('AccountManager', `账号槽位捕获失败：${(error as Error).message}`);
       this.logger.error('Failed to capture slot credentials', error);
       return false;
     }

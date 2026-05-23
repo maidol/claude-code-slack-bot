@@ -472,7 +472,7 @@ export class CliHandler {
         this.logger.info(`Loaded session state from disk`, { loaded, skipped });
       }
     } catch (error) {
-      errorCollector.add('CliHandler', `세션 상태 로드 실패: ${(error as Error).message}`);
+      errorCollector.add('CliHandler', `会话状态加载失败：${(error as Error).message}`);
       this.logger.error('Failed to load session state from disk', error);
     }
   }
@@ -490,7 +490,7 @@ export class CliHandler {
       }
       fs.writeFileSync(this.SESSION_STATE_FILE, JSON.stringify(data, null, 2), 'utf-8');
     } catch (error) {
-      errorCollector.add('CliHandler', `세션 상태 저장 실패: ${(error as Error).message}`);
+      errorCollector.add('CliHandler', `会话状态保存失败：${(error as Error).message}`);
       this.logger.error('Failed to save session state to disk', error);
     }
   }

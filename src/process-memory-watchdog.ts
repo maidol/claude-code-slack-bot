@@ -50,7 +50,7 @@ export class ProcessMemoryWatchdog {
   private excludedPids: Set<number> = new Set();
   private cachedCommitLimitMB: number = 0;
   private logger = new Logger('MemoryWatchdog');
-  private locale: Locale = 'ko';
+  private locale: Locale = 'zh';
 
   constructor(
     private thresholdPct: number,

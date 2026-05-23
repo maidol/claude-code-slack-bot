@@ -71,7 +71,10 @@ export class ReportServer {
   private handle(req: http.IncomingMessage, res: http.ServerResponse): void {
     try {
       const url = new URL(req.url || '/', `http://127.0.0.1:${this.actualPort}`);
-      if (url.searchParams.get('t') !== this.token) {
+      const provided = url.searchParams.get('t') || '';
+      const a = Buffer.from(provided);
+      const b = Buffer.from(this.token);
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Unauthorized');
         return;
