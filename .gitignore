@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
-.claude/*
-!.claude/settings.local.json.example
+.claude/
 
 # Environment variables
 .env
