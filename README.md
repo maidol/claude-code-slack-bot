@@ -5,6 +5,47 @@ Resume previous sessions, switch between projects, and manage everything through
 
 > Forked from [mpociot/claude-code-slack-bot](https://github.com/mpociot/claude-code-slack-bot). Uses Claude Code CLI (`claude -p`) with Socket Mode (no public URL needed). Cross-platform: Windows / macOS / Linux.
 
+## Quick Start (5 minutes)
+
+1. **Prerequisites**: [Node.js 18+](https://nodejs.org/), and the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed + logged in:
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   claude login                       # one-time browser login
+   claude --version                   # verify
+   ```
+2. **Clone and install**:
+   ```bash
+   git clone https://github.com/kkhfiles/claude-code-slack-bot.git
+   cd claude-code-slack-bot
+   ./setup.sh                         # macOS / Linux
+   setup.bat                          # Windows
+   ```
+3. **Create the Slack app** (one-time, ~2 min):
+   - Open <https://api.slack.com/apps> → **Create New App** → **From an app manifest**
+   - Paste the contents of [`slack-app-manifest.yaml`](slack-app-manifest.yaml)
+   - **OAuth & Permissions** → Install to workspace → copy `xoxb-...` Bot Token
+   - **Basic Information** → App-Level Tokens → create with `connections:write` scope → copy `xapp-...` App Token
+   - **Basic Information** → copy Signing Secret
+4. **Configure `.env`** (created by `setup.sh`):
+   ```env
+   SLACK_BOT_TOKEN=xoxb-...
+   SLACK_APP_TOKEN=xapp-...
+   SLACK_SIGNING_SECRET=...
+   BASE_DIRECTORY=/path/to/your/code          # Windows: P:\your\code
+   ```
+5. **Run**:
+   ```bash
+   ./start.sh                         # macOS / Linux
+   start.bat                          # Windows
+   ```
+6. **Test in Slack**: invite the bot to a channel, type `-help`. To work on a project:
+   ```
+   -cwd my-project
+   Refactor the auth module
+   ```
+
+Skipping prerequisites or stuck on a step? See [Troubleshooting](#troubleshooting) and the detailed [Installation](#installation) walkthrough below.
+
 ## Key Features
 
 ### Start Tasks Remotely
@@ -134,7 +175,7 @@ npm install --ignore-scripts  # Windows
 **Each user must create their own Slack App** (Socket Mode maintains one connection per app).
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From an app manifest**
-2. Select your workspace and paste the contents of `slack-app-manifest.json`
+2. Select your workspace and paste the contents of `slack-app-manifest.yaml`
 3. After creating the app:
 
 **Generate tokens:**
@@ -153,7 +194,12 @@ Edit `.env`:
 SLACK_BOT_TOKEN=xoxb-your-bot-token
 SLACK_APP_TOKEN=xapp-your-app-token
 SLACK_SIGNING_SECRET=your-signing-secret
-BASE_DIRECTORY=P:\your\base\directory
+
+# Base directory — pick the one for your platform:
+BASE_DIRECTORY=P:\your\base\directory      # Windows
+# BASE_DIRECTORY=/Users/username/Code/     # macOS
+# BASE_DIRECTORY=/home/username/code/      # Linux
+
 # DEBUG=true
 
 # Optional: Assistant scheduler
@@ -200,7 +246,9 @@ pm2 save             # Save current process list
 
 **Windows:**
 ```bash
-autostart-setup.bat  # Registers pm2-resurrect.vbs in Windows Startup folder
+npm install -g pm2-windows-startup
+pm2-startup install          # Registers pm2 to start on boot
+pm2 save                     # Save current process list
 ```
 
 ### Manual Run (without pm2)
@@ -518,13 +566,13 @@ Set to `0` if you see Slack rate-limit warnings from `chat.update` during worklo
 
 ### Holiday Calendar
 
-Public holiday detection is currently hardcoded to **South Korea** (`Holidays('KR')`) in `assistant-scheduler.ts` and `schedule-manager.ts`. To use a different country:
+Public holiday detection (skipping non-working days for briefing/schedule) defaults to **South Korea**. To use a different country, set `HOLIDAYS_COUNTRY` in `.env`:
 
-1. Edit `src/assistant-scheduler.ts` line 121: `new Holidays('KR')` → `new Holidays('US')` (or your [ISO 3166-1 country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2))
-2. Edit `src/schedule-manager.ts` line 37: same change
-3. Rebuild: `npm run build && pm2 restart claude-slack-bot`
+```env
+HOLIDAYS_COUNTRY=US   # ISO 3166-1 alpha-2 country code (KR, US, JP, CN, DE, ...)
+```
 
-> **Future improvement**: This should be configurable via environment variable (e.g., `HOLIDAYS_COUNTRY=US`). Contributions welcome.
+Then restart: `pm2 restart claude-slack-bot`. The change applies to both `AssistantScheduler` and `ScheduleManager`.
 
 ### Platform-Specific Features
 
@@ -544,6 +592,32 @@ The assistant scheduler requires prompt template files in `ASSISTANT_CONFIG_DIR/
 - **Calendar judgment** (`calendar-judgment.md`) — How to decide which events need reminders
 - **Analysis types** (`analysis-*.md`) — What to analyze weekly (one file per analysis type)
 
+## Architecture
+
+```
+                     Slack workspace
+                     │  (Socket Mode WebSocket)
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│  SlackHandler  ──── handles events, commands, UI    │
+│      │                                              │
+│      ├──► CliHandler ──spawn──► claude -p           │
+│      │                          (stream-json)       │
+│      │                                              │
+│      ├──► AccountManager   (OAuth tokens, switch)   │
+│      ├──► CalendarPoller   (Google Calendar HTTP)   │
+│      ├──► AssistantScheduler (briefing/reminders/   │
+│      │                       analysis automation)   │
+│      ├──► ScheduleManager  (session auto-start)     │
+│      ├──► ReportServer     (HTML viewer, 127.0.0.1) │
+│      └──► McpManager       (MCP server configs)     │
+└─────────────────────────────────────────────────────┘
+                     │
+        Persisted to disk (~/.claude/, ./*.json)
+```
+
+Each Slack message in a thread maps to a Claude CLI session (resumable via `--resume`). The bot spawns `claude -p` per request and streams stdout back to Slack as `chat.update` events. OAuth tokens, session IDs, schedules, and calendar state are persisted as JSON files (see [Project Structure](#project-structure) for locations).
+
 ## Project Structure
 
 ```
@@ -559,7 +633,7 @@ src/
 ├── assistant-scheduler.ts       # Assistant scheduler (briefing, reminders, analysis)
 ├── file-handler.ts              # File upload handling
 ├── session-scanner.ts           # Cross-project session scanning
-├── messages.ts                  # i18n translation catalog (ko/en)
+├── messages.ts                  # i18n translation catalog (zh/en)
 ├── todo-manager.ts              # Task list management
 ├── mcp-manager.ts               # MCP server management
 ├── calendar-poller.ts           # Google Calendar direct HTTP polling
@@ -576,16 +650,46 @@ src/
 ### Bot not responding
 1. Restart: `pm2 restart claude-slack-bot` (or `stop.bat` → `start.bat` on Windows)
 2. Check logs: `pm2 logs claude-slack-bot`
-3. Verify `.env` token validity
-4. Ensure bot is added to the channel
+3. Verify `.env` token validity (Bot/App/Signing Secret all present, not the placeholder values)
+4. Ensure bot is invited to the channel (`/invite @ClaudeCode`)
+
+### "Claude CLI not found" / spawn errors
+- Install: `npm install -g @anthropic-ai/claude-code`
+- Authenticate once: `claude login`
+- Verify: `claude --version` from the same shell that runs `start.sh`/`start.bat`
+- On Windows, ensure `claude.exe` is on `%PATH%` for the user that runs pm2
 
 ### "No working directory set" error
-Set a working directory first with `-cwd <path>`.
+Set a working directory first with `-cwd <path>` (or `-cwd project-name` if `BASE_DIRECTORY` is set).
+
+### File uploads (`-report`) fail silently
+The Slack app is missing the `files:write` scope. Re-import [`slack-app-manifest.yaml`](slack-app-manifest.yaml) (current manifest includes the scope) or add it manually in **OAuth & Permissions** → Bot Token Scopes.
+
+### Rate limit on first query
+The bot detects rate limits and shows retry buttons. To pre-arm fallback:
+- Run `-apikey` and register your Anthropic API key (used when subscription limit hits)
+- Or run `-account setup` to add a backup Claude account
+
+### Account switch doesn't propagate to terminal CLI
+The bot writes `~/.claude/.credentials.json` on switch. If a terminal `claude` session was open before the switch, exit and restart it (`/exit` → `claude -c` or `claude -r`).
 
 ### `npm install` fails on Windows
 ```bash
 npm install --ignore-scripts
 ```
+
+### `pm2` startup fails / build errors after pull
+1. Run `npm run build` to surface TypeScript errors
+2. Verify Node version: `node --version` (≥ 18 required)
+3. Delete `node_modules` + `package-lock.json` and reinstall if corrupted
+
+### Holidays not skipping for non-Korean users
+Set `HOLIDAYS_COUNTRY` in `.env` to an [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country code (e.g. `US`, `JP`, `CN`).
+
+### Backing up / migrating data
+The bot keeps state in two locations. Back up before migrations:
+- `~/.claude/.bot-accounts.json` (OAuth tokens), `~/.claude/.bot-api-keys.json` (API keys)
+- Project root: `.working-dirs.json`, `.session-state.json`, `.schedule-config.json`, `.assistant-costs.json`, `.calendar-cache.json`, `.calendar-notifications.json`, `.calendar-muted-events.json`
 
 ## Upstream Updates
 

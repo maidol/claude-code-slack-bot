@@ -218,9 +218,9 @@ update.bat                    # Windows
 - 优先级：Thread > Channel/DM > DEFAULT_WORKING_DIRECTORY
 - 在 DM 线程中设置时自动创建 DM 级回退
 
-### i18n（韩文 / 英文）
+### i18n（中文 / 英文）
 - `src/messages.ts`：翻译目录（`Record<string, Record<Locale, string>>`）+ `t(key, locale, params?)` 函数
-- 通过 Slack `users.info` API 的 `locale` 字段自动检测（带缓存）：`ko-*` → Korean，其他 → English
+- 通过 Slack `users.info` API 的 `locale` 字段自动检测（带缓存）：`zh-*` → Chinese，其他 → English
 - 支持 `{{variable}}` 插值
 - 翻译范围：所有面向用户的字符串（状态、命令响应、按钮、模态框、帮助等）
 - 不翻译：发送给 Claude 的提示词、日志消息、命令输入解析
