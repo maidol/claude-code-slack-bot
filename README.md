@@ -303,6 +303,20 @@ Why: the CLI only reads `<cwd>/.claude/` and `~/.claude/`, with no upward recurs
 
 Opt-out: delete the file. The bot only creates it when missing — it will not be recreated on the next `-cwd`. Picker-resume actions that auto-switch cwd also trigger this and show a "💡 Created" notice.
 
+#### Custom-gateway model aliases
+
+When `ANTHROPIC_BASE_URL` points at a proxy that uses a different model namespace than official Anthropic IDs (e.g. `zo:anthropic/claude-sonnet-4-6`), the CLI's built-in alias expansion (`sonnet` → `claude-sonnet-4-6`) produces bare IDs the gateway doesn't recognise. Most gateways silently fall back to a default model in that case — typically opus — which makes every `-o`/`-s`/`-h` switch look like it landed on opus.
+
+Set these in `.env` to the exact IDs your gateway accepts:
+
+```bash
+MODEL_ALIAS_OPUS=zo:anthropic/claude-opus-4-7
+MODEL_ALIAS_SONNET=zo:anthropic/claude-sonnet-4-6
+MODEL_ALIAS_HAIKU=zo:anthropic/claude-sonnet-4-6   # If the gateway has no haiku, map to sonnet
+```
+
+Any slot left unset falls through to the CLI's built-in alias. The resolver runs in the bot itself before `--model` is passed to the CLI, so `settings.local.json` does **not** need these variables.
+
 ### Session Management
 
 | Command | Description |

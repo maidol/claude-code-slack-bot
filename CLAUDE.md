@@ -73,7 +73,8 @@ update.bat                    # Windows
   - `-m`/`-model [名称]`/`모델 [名称]` — 查询/设置频道模型（`sonnet`、`opus`、`haiku`、完整 ID、`default`）
   - `-opus`/`-o`、`-sonnet`/`-s`、`-haiku`/`-h` — 通过别名立即切换频道模型
   - `!o <prompt>`/`!s <prompt>`/`!h <prompt>` — 消息前缀方式实现一次性模型应用（try/finally 还原频道模型）
-  - 别名映射：`SlackHandler.resolveModelAlias()`（完整 ID 原样透传）
+  - 别名映射：`config.resolveModel()`（共享解析器，slack-handler、calendar-poller、assistant-scheduler 都走这里；完整 ID 原样透传）
+  - **网关别名覆盖**：当 `ANTHROPIC_BASE_URL` 指向自定义命名空间的网关（如 `zo:anthropic/...`）时，CLI 内置的 `opus/sonnet/haiku` → 裸 ID 展开不会被网关识别，会静默回落到网关默认模型（看起来"永远是 opus"）。设置 `MODEL_ALIAS_OPUS` / `MODEL_ALIAS_SONNET` / `MODEL_ALIAS_HAIKU` 为网关期望的完整 ID 即可修复；未设置的桶继续走 CLI 默认行为。haiku 在缺少对应模型的网关上建议映射到 sonnet 兜底。启动日志会打印 `modelAliasOverrides` 数组展示当前生效的桶。
 - `-r`/`-resume`：跨项目会话选择器（点击按钮 → 自动切换 cwd 并恢复会话）
 - `-sessions all`：列出所有项目会话（与选择器内容相同）
 - `-version`：显示机器人版本 + git hash + 检查更新（`src/version.ts`）

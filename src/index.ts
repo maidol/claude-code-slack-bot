@@ -66,6 +66,8 @@ async function start() {
       usingVertex: config.claude.useVertex,
       usingAnthropicAPI: !config.claude.useBedrock && !config.claude.useVertex,
       anthropicBaseUrl: config.anthropic.baseUrl || 'default (api.anthropic.com)',
+      modelAliasOverrides: (['opus', 'sonnet', 'haiku'] as const)
+        .filter((k) => config.modelAliases[k]),
       debugMode: config.debug,
       baseDirectory: config.baseDirectory || 'not set',
       mcpServers: mcpConfig ? Object.keys(mcpConfig.mcpServers).length : 0,
