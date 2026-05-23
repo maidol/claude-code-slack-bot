@@ -5,6 +5,7 @@ import { Logger } from './logger';
 import { CalendarPoller } from './calendar-poller';
 import { errorCollector } from './error-collector';
 import { isRateLimitText } from './rate-limit-utils';
+import { resolveModel } from './config';
 
 export interface AssistantConfig {
   briefing: {
@@ -578,7 +579,7 @@ export class AssistantScheduler {
 
     const result = await this.spawnSession(prompt, {
       workingDirectory: this.workingDir,
-      model: 'claude-haiku-4-5-20251001',
+      model: resolveModel('haiku'),
       permissionMode: 'default',
       allowedTools,
       noSessionPersistence: true,

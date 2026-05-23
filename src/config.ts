@@ -29,6 +29,15 @@ export const config = {
   // Default model used when channel has no explicit override.
   // Aliases: 'sonnet' | 'opus' | 'haiku' | full Anthropic ID
   defaultModel: process.env.DEFAULT_MODEL || 'sonnet',
+  // Optional alias → full-ID overrides. Required when ANTHROPIC_BASE_URL points
+  // at a gateway whose model namespace differs from official Anthropic IDs
+  // (e.g. some proxies expect "zo:anthropic/claude-sonnet-4-6"). Empty string
+  // means "use the CLI's built-in alias expansion".
+  modelAliases: {
+    opus: process.env.MODEL_ALIAS_OPUS || '',
+    sonnet: process.env.MODEL_ALIAS_SONNET || '',
+    haiku: process.env.MODEL_ALIAS_HAIKU || '',
+  },
   debug: process.env.DEBUG === 'true' || process.env.NODE_ENV === 'development',
   assistant: {
     dmChannel: process.env.ASSISTANT_DM_CHANNEL || '',
@@ -50,6 +59,34 @@ export const config = {
     processThresholdMB: parseInt(process.env.MEMORY_WATCHDOG_PROCESS_THRESHOLD_MB || '7168', 10),
   },
 };
+
+// Resolve short alias / full ID to the model identifier sent to the CLI.
+// Order: configured gateway override > short-alias canonical name > pass-through.
+// Keep aliases ('opus'/'sonnet'/'haiku') as the canonical form when no override
+// is set, so the CLI handles version expansion. Full IDs pass through untouched.
+export function resolveModel(input: string): string {
+  const short: Record<string, string> = {
+    o: 'opus', opus: 'opus',
+    s: 'sonnet', sonnet: 'sonnet',
+    h: 'haiku', haiku: 'haiku',
+  };
+  const canonical = short[input.toLowerCase()] ?? input;
+  // Also map full Anthropic IDs back to the alias bucket so users who write the
+  // full name still hit the gateway override.
+  const fullToAlias: Record<string, 'opus' | 'sonnet' | 'haiku'> = {
+    'claude-opus-4-7': 'opus',
+    'claude-sonnet-4-6': 'sonnet',
+    'claude-haiku-4-5-20251001': 'haiku',
+  };
+  const bucket = (canonical === 'opus' || canonical === 'sonnet' || canonical === 'haiku')
+    ? canonical
+    : fullToAlias[canonical];
+  if (bucket) {
+    const override = config.modelAliases[bucket];
+    if (override) return override;
+  }
+  return canonical;
+}
 
 export function validateConfig() {
   const required = [

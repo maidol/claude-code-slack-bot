@@ -14,7 +14,7 @@ import { ScheduleManager } from './schedule-manager';
 import { AccountManager, AccountId } from './account-manager';
 import { AssistantScheduler, SpawnOpts, SessionResult } from './assistant-scheduler';
 import { CalendarPoller } from './calendar-poller';
-import { config } from './config';
+import { config, resolveModel } from './config';
 import { Locale, t, formatTime, formatDateTime, getHelpText as getHelpTextI18n } from './messages';
 import { getVersionInfo, checkForUpdates } from './version';
 import { isRateLimitText as isRateLimitTextUtil, isRateLimitError as isRateLimitErrorUtil } from './rate-limit-utils';
@@ -1519,14 +1519,10 @@ export class SlackHandler {
     return null;
   }
 
-  // Resolve short alias to canonical model name. Pass-through for full IDs.
+  // Resolve short alias to canonical model name. Delegates to config.resolveModel
+  // so gateway overrides (MODEL_ALIAS_*) take effect uniformly across the bot.
   private static resolveModelAlias(input: string): string {
-    const map: Record<string, string> = {
-      o: 'opus', opus: 'opus',
-      s: 'sonnet', sonnet: 'sonnet',
-      h: 'haiku', haiku: 'haiku',
-    };
-    return map[input.toLowerCase()] ?? input;
+    return resolveModel(input);
   }
 
   // !o / !s / !h prefix → one-time model override + stripped prompt.
@@ -1918,7 +1914,7 @@ export class SlackHandler {
 
     // Force haiku model for minimal token usage, restore after
     const prevModel = this.channelModels.get(channel);
-    this.channelModels.set(channel, 'claude-haiku-4-5-20251001');
+    this.channelModels.set(channel, resolveModel('haiku'));
     try {
       await this.handleMessage(event, say);
     } finally {

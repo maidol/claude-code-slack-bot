@@ -19,6 +19,7 @@ import { Logger } from './logger';
 import { errorCollector } from './error-collector';
 import type { SpawnOpts, SessionResult } from './assistant-scheduler';
 import { isRateLimitText } from './rate-limit-utils';
+import { resolveModel } from './config';
 
 // --- Types ---
 
@@ -602,7 +603,7 @@ export class CalendarPoller {
     try {
       const result = await this.spawnSession(prompt, {
         workingDirectory: os.tmpdir(),  // No CLAUDE.md → saves ~39K tokens
-        model: 'claude-haiku-4-5-20251001',
+        model: resolveModel('haiku'),
         permissionMode: 'default',
         maxBudgetUsd: config.reminders.maxBudgetUsd || 0.02,
         systemPrompt: 'You judge calendar events and output JSON. No other output.',
