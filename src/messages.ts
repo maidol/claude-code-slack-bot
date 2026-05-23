@@ -11,6 +11,8 @@ const messages: Record<string, Record<Locale, string>> = {
   'status.planReady': { en: '*Plan ready*', zh: '*计划就绪*' },
   'status.errorOccurred': { en: '*Error occurred*', zh: '*出错了*' },
   'status.cancelled': { en: '*Cancelled*', zh: '*已取消*' },
+  'status.cancelHint': { en: '_send \`-stop\` to cancel_', zh: '_发送 \`-stop\` 中断_' },
+  'status.tokens': { en: '↑ {{count}} tokens', zh: '↑ {{count}} tokens' },
 
   // --- Command responses ---
   'cmd.stop.stopped': { en: 'Stopped.', zh: '已中断。' },

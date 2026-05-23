@@ -39,6 +39,13 @@ interface MessageEvent {
   }>;
 }
 
+const THINKING_VERBS: Record<Locale, string[]> = {
+  en: ['Thinking', 'Pondering', 'Considering', 'Reflecting', 'Mulling',
+       'Synthesizing', 'Crafting', 'Reasoning', 'Analyzing', 'Deliberating'],
+  zh: ['思考中', '推演中', '探索中', '沉思中', '构思中',
+       '汇总中', '分析中', '揣度中', '斟酌中', '推敲中'],
+};
+
 export class SlackHandler {
   private app: App;
   private cliHandler: CliHandler;
@@ -623,29 +630,56 @@ export class SlackHandler {
     const channelModel = SlackHandler.resolveModelAlias(this.channelModels.get(channel) || config.defaultModel);
     let apiKeyCostInfo: { queryCost: number; totalCost: number } | null = null;
     let cliError = false;
+    let totalInputTokens = 0;
+    const formatTokens = (n: number): string => {
+      if (n < 1000) return String(n);
+      if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    };
 
-    // Heartbeat: keep status message alive with rotating spinner + elapsed time during long-running tool calls
+    // Heartbeat: brail spinner + elapsed seconds + cancel hint, refreshed every 2s.
+    // Disabled when LOADING_SPINNER_ENABLED=0 (single static chat.update on state change instead).
     let heartbeatTimer: NodeJS.Timeout | null = null;
     let heartbeatStart = 0;
     let heartbeatLabel = '';
+    let heartbeatPrefixEmoji = '';
+    let heartbeatPhase: 'thinking' | 'tool' = 'tool';
     let heartbeatFrame = 0;
-    const SPINNER_FRAMES = ['🕐', '🕑', '🕒', '🕓', '🕔', '🕕', '🕖', '🕗', '🕘', '🕙', '🕚', '🕛'];
-    const startHeartbeat = (label: string) => {
+    const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    const VERB_ROTATE_EVERY = 3; // ticks (3 ticks * 2s = 6s per verb)
+    const renderHeartbeat = (frame: number, sec: number): string => {
+      const spinner = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
+      let label = heartbeatLabel;
+      if (heartbeatPhase === 'thinking') {
+        const verbs = THINKING_VERBS[locale] || THINKING_VERBS.en;
+        const verb = verbs[Math.floor(frame / VERB_ROTATE_EVERY) % verbs.length];
+        label = `${heartbeatPrefixEmoji} *${verb}...*`;
+      }
+      const cancelHint = t('status.cancelHint', locale);
+      const tokenSuffix = totalInputTokens > 0
+        ? ` · ${t('status.tokens', locale, { count: formatTokens(totalInputTokens) })}`
+        : '';
+      return `${label} ${spinner} ${sec}s${tokenSuffix}\n\n${cancelHint}`;
+    };
+    const startHeartbeat = (label: string, opts?: { phase?: 'thinking' | 'tool'; prefixEmoji?: string }) => {
+      if (!config.loadingSpinner.enabled) return;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatLabel = label;
+      heartbeatPrefixEmoji = opts?.prefixEmoji || '';
+      heartbeatPhase = opts?.phase || 'tool';
       heartbeatStart = Date.now();
       heartbeatFrame = 0;
       heartbeatTimer = setInterval(() => {
         if (!statusMessageTs) return;
         const sec = Math.floor((Date.now() - heartbeatStart) / 1000);
-        const spinner = SPINNER_FRAMES[heartbeatFrame % SPINNER_FRAMES.length];
+        const text = renderHeartbeat(heartbeatFrame, sec);
         heartbeatFrame++;
         this.app.client.chat.update({
           channel,
           ts: statusMessageTs,
-          text: `${heartbeatLabel} ${spinner} ${sec}s`,
+          text,
         }).catch(() => {});
-      }, 5000);
+      }, 2000);
     };
     const stopHeartbeat = () => {
       if (heartbeatTimer) {
@@ -671,6 +705,9 @@ export class SlackHandler {
       // Add anchor reaction first to prevent line jumping when progress reactions change
       await this.addAnchorReaction(sessionKey);
       await this.updateMessageReaction(sessionKey, statusEmoji);
+
+      // Start animated spinner immediately; verbs rotate during this phase
+      startHeartbeat(`${statusEmoji} *${statusText}*`, { phase: 'thinking', prefixEmoji: statusEmoji });
 
       // Show command hint on first message in a new thread
       const threadKey = `${channel}:${thread_ts || ts}`;
@@ -760,7 +797,7 @@ export class SlackHandler {
                   ts: statusMessageTs,
                   text: repeatStatusText,
                 }).catch(() => {});
-                startHeartbeat(repeatStatusText);
+                startHeartbeat(repeatStatusText, { phase: 'tool' });
               } else {
                 lastStatusText = newStatusText;
                 statusRepeatCount = 1;
@@ -769,7 +806,7 @@ export class SlackHandler {
                   ts: statusMessageTs,
                   text: newStatusText,
                 }).catch(() => {});
-                startHeartbeat(newStatusText);
+                startHeartbeat(newStatusText, { phase: 'tool' });
               }
             }
             await this.updateMessageReaction(sessionKey, toolEmoji);
@@ -793,6 +830,14 @@ export class SlackHandler {
 
         if (event.type === 'assistant') {
           const assistantEvent = event as CliAssistantEvent;
+
+          // Track cumulative input tokens (model + cache) for heartbeat display
+          const usage = (assistantEvent.message as any)?.usage;
+          if (usage) {
+            totalInputTokens = (usage.input_tokens || 0)
+              + (usage.cache_read_input_tokens || 0)
+              + (usage.cache_creation_input_tokens || 0);
+          }
 
           // Track last assistant message UUID for session continuity
           if (assistantEvent.uuid && session) {
@@ -2939,19 +2984,22 @@ export class SlackHandler {
         this.pendingPickers.delete(actionValue.pickerId);
 
         // 1. Auto-switch cwd to the session's project path
+        let settingsCreated = false;
         if (session.projectPath && path.isAbsolute(session.projectPath)) {
-          this.workingDirManager.setWorkingDirectory(
+          const cwdResult = this.workingDirManager.setWorkingDirectory(
             picker.channel, session.projectPath, picker.threadTs, picker.user
           );
+          settingsCreated = !!cwdResult.settingsCreated;
         }
 
-        // 2. Update picker message to show selection
+        // 2. Update picker message to show selection (+ settings notice if applicable)
         const title = session.summary || session.firstPrompt || t('picker.noTitle', actionLocale);
         const cwdNote = path.isAbsolute(session.projectPath) ? `\n_cwd → ${session.projectPath}_` : '';
+        const settingsNote = settingsCreated ? `\n💡 ${t('cwd.settingsCreated', actionLocale)}` : '';
         await this.app.client.chat.update({
           channel: picker.channel,
           ts: picker.messageTs,
-          text: `📂 ${t('picker.resuming', actionLocale, { title })}${cwdNote}`,
+          text: `📂 ${t('picker.resuming', actionLocale, { title })}${cwdNote}${settingsNote}`,
           blocks: [],
         }).catch(() => {});
 

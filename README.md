@@ -295,6 +295,14 @@ Some commands also work without `-` for mobile convenience (e.g., `resume`, `con
 
 Settings are persisted to disk and survive bot restarts.
 
+#### Per-project Anthropic config
+
+Every time `-cwd <dir>` succeeds, the bot writes `.claude/settings.local.json` into the target directory (when not already present). The file contains your `.env`'s `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` at Local scope, which the Claude CLI merges *above* `~/.claude/settings.json`.
+
+Why: the CLI only reads `<cwd>/.claude/` and `~/.claude/`, with no upward recursion. Without the per-project file, a user-level `apiKeyHelper` silently overrides your `.env`'s gateway URL.
+
+Opt-out: delete the file. The bot only creates it when missing — it will not be recreated on the next `-cwd`. Picker-resume actions that auto-switch cwd also trigger this and show a "💡 Created" notice.
+
 ### Session Management
 
 | Command | Description |
@@ -561,6 +569,23 @@ CLI_INCLUDE_PARTIAL=1   # 0 to disable (default: enabled)
 ```
 
 Set to `0` if you see Slack rate-limit warnings from `chat.update` during workloads with many parallel tool calls.
+
+### Loading status
+
+While the model is working, the status message animates:
+
+```
+🤔 *Pondering...* ⠋ 12s · ↑ 1.2k tokens
+
+_send `-stop` to cancel_
+```
+
+- **Spinner** (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) updates every 2 seconds.
+- **Verb** (Thinking, Pondering, Considering, …) rotates every 6 s during the initial thinking phase. Once a tool is called the label switches to e.g. `🔍 Using Grep`.
+- **Token counter** shows cumulative input tokens (model + cache).
+- **Cancel hint** is always visible.
+
+Disable with `LOADING_SPINNER_ENABLED=0` in `.env`.
 
 ## Known Limitations & Customization Notes
 
