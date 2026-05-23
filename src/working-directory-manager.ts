@@ -169,7 +169,14 @@ export class WorkingDirectoryManager {
       env,
     };
     if (apiKey) {
-      payload.apiKeyHelper = `echo '${apiKey}'`;
+      // Only embed in apiKeyHelper if the key is shell-safe. Standard
+      // sk-ant-* keys match this; if a custom key contains quotes/$/`/\, we
+      // fall back to env.ANTHROPIC_API_KEY only (which the CLI still honors).
+      if (/^[A-Za-z0-9_\-]+$/.test(apiKey)) {
+        payload.apiKeyHelper = `echo '${apiKey}'`;
+      } else {
+        this.logger.warn('ANTHROPIC_API_KEY contains shell-unsafe characters; apiKeyHelper omitted (env.ANTHROPIC_API_KEY still set)');
+      }
     }
     payload.permissions = { allow: [] };
 
