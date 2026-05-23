@@ -2939,19 +2939,22 @@ export class SlackHandler {
         this.pendingPickers.delete(actionValue.pickerId);
 
         // 1. Auto-switch cwd to the session's project path
+        let settingsCreated = false;
         if (session.projectPath && path.isAbsolute(session.projectPath)) {
-          this.workingDirManager.setWorkingDirectory(
+          const cwdResult = this.workingDirManager.setWorkingDirectory(
             picker.channel, session.projectPath, picker.threadTs, picker.user
           );
+          settingsCreated = !!cwdResult.settingsCreated;
         }
 
-        // 2. Update picker message to show selection
+        // 2. Update picker message to show selection (+ settings notice if applicable)
         const title = session.summary || session.firstPrompt || t('picker.noTitle', actionLocale);
         const cwdNote = path.isAbsolute(session.projectPath) ? `\n_cwd → ${session.projectPath}_` : '';
+        const settingsNote = settingsCreated ? `\n💡 ${t('cwd.settingsCreated', actionLocale)}` : '';
         await this.app.client.chat.update({
           channel: picker.channel,
           ts: picker.messageTs,
-          text: `📂 ${t('picker.resuming', actionLocale, { title })}${cwdNote}`,
+          text: `📂 ${t('picker.resuming', actionLocale, { title })}${cwdNote}${settingsNote}`,
           blocks: [],
         }).catch(() => {});
 
