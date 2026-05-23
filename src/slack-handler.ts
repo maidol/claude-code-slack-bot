@@ -39,6 +39,13 @@ interface MessageEvent {
   }>;
 }
 
+const THINKING_VERBS: Record<Locale, string[]> = {
+  en: ['Thinking', 'Pondering', 'Considering', 'Reflecting', 'Mulling',
+       'Synthesizing', 'Crafting', 'Reasoning', 'Analyzing', 'Deliberating'],
+  zh: ['思考中', '推演中', '探索中', '沉思中', '构思中',
+       '汇总中', '分析中', '揣度中', '斟酌中', '推敲中'],
+};
+
 export class SlackHandler {
   private app: App;
   private cliHandler: CliHandler;
@@ -629,17 +636,28 @@ export class SlackHandler {
     let heartbeatTimer: NodeJS.Timeout | null = null;
     let heartbeatStart = 0;
     let heartbeatLabel = '';
+    let heartbeatPrefixEmoji = '';
+    let heartbeatPhase: 'thinking' | 'tool' = 'tool';
     let heartbeatFrame = 0;
     const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    const VERB_ROTATE_EVERY = 3; // ticks (3 ticks * 2s = 6s per verb)
     const renderHeartbeat = (frame: number, sec: number): string => {
       const spinner = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
+      let label = heartbeatLabel;
+      if (heartbeatPhase === 'thinking') {
+        const verbs = THINKING_VERBS[locale] || THINKING_VERBS.en;
+        const verb = verbs[Math.floor(frame / VERB_ROTATE_EVERY) % verbs.length];
+        label = `${heartbeatPrefixEmoji} *${verb}...*`;
+      }
       const cancelHint = t('status.cancelHint', locale);
-      return `${heartbeatLabel} ${spinner} ${sec}s\n\n${cancelHint}`;
+      return `${label} ${spinner} ${sec}s\n\n${cancelHint}`;
     };
-    const startHeartbeat = (label: string) => {
+    const startHeartbeat = (label: string, opts?: { phase?: 'thinking' | 'tool'; prefixEmoji?: string }) => {
       if (!config.loadingSpinner.enabled) return;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatLabel = label;
+      heartbeatPrefixEmoji = opts?.prefixEmoji || '';
+      heartbeatPhase = opts?.phase || 'tool';
       heartbeatStart = Date.now();
       heartbeatFrame = 0;
       heartbeatTimer = setInterval(() => {
