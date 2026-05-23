@@ -58,6 +58,7 @@ const messages: Record<string, Record<Locale, string>> = {
 
   // --- Working directory ---
   'cwd.set': { en: 'Working directory set for {{context}}: `{{path}}`', zh: '{{context}}工作目录已设置：`{{path}}`' },
+  'cwd.settingsCreated': { en: 'Created `.claude/settings.local.json` with gateway config from `.env` (overrides user-level settings).', zh: '已在该目录创建 `.claude/settings.local.json`（写入 `.env` 中的网关配置，会覆盖用户级 settings）。' },
   'cwd.context.thread': { en: 'this thread', zh: '此 thread' },
   'cwd.context.dm': { en: 'this conversation', zh: '此对话' },
   'cwd.context.channel': { en: 'this channel', zh: '此频道' },

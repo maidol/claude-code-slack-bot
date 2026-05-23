@@ -248,7 +248,11 @@ export class SlackHandler {
       const result = this.workingDirManager.setWorkingDirectory(channel, setDirPath, thread_ts, isDM ? user : undefined);
       if (result.success) {
         const context = thread_ts ? t('cwd.context.thread', locale) : (isDM ? t('cwd.context.dm', locale) : t('cwd.context.channel', locale));
-        await say({ text: `✅ ${t('cwd.set', locale, { context, path: result.resolvedPath! })}`, thread_ts: thread_ts });
+        let message = `✅ ${t('cwd.set', locale, { context, path: result.resolvedPath! })}`;
+        if (result.settingsCreated) {
+          message += `\n\n💡 ${t('cwd.settingsCreated', locale)}`;
+        }
+        await say({ text: message, thread_ts: thread_ts });
       } else {
         await say({ text: `❌ ${result.error}`, thread_ts: thread_ts });
       }
