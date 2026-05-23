@@ -617,6 +617,32 @@ export class SlackHandler {
     let apiKeyCostInfo: { queryCost: number; totalCost: number } | null = null;
     let cliError = false;
 
+    // Heartbeat: keep status message alive with elapsed time during long-running tool calls
+    let heartbeatTimer: NodeJS.Timeout | null = null;
+    let heartbeatStart = 0;
+    let heartbeatLabel = '';
+    const startHeartbeat = (label: string) => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatLabel = label;
+      heartbeatStart = Date.now();
+      heartbeatTimer = setInterval(() => {
+        if (!statusMessageTs) return;
+        const sec = Math.floor((Date.now() - heartbeatStart) / 1000);
+        if (sec < 5) return;
+        this.app.client.chat.update({
+          channel,
+          ts: statusMessageTs,
+          text: `${heartbeatLabel} (${sec}s)`,
+        }).catch(() => {});
+      }, 5000);
+    };
+    const stopHeartbeat = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    };
+
     try {
       this.logger.info('Spawning Claude CLI process', {
         prompt: finalPrompt.substring(0, 200) + (finalPrompt.length > 200 ? '...' : ''),
@@ -691,6 +717,7 @@ export class SlackHandler {
       this.activeProcesses.set(sessionKey, cliProcess);
 
       for await (const event of cliProcess) {
+        stopHeartbeat();
         // Session init tracking
         if (event.type === 'system' && (event as any).subtype === 'init') {
           const initEvent = event as any;
@@ -717,11 +744,13 @@ export class SlackHandler {
               const newStatusText = `${toolEmoji} ${t('status.usingTool', locale, { toolName })}`;
               if (newStatusText === lastStatusText) {
                 statusRepeatCount++;
+                const repeatStatusText = `${toolEmoji} ${t('status.usingToolCount', locale, { toolName, count: statusRepeatCount })}`;
                 await this.app.client.chat.update({
                   channel,
                   ts: statusMessageTs,
-                  text: `${toolEmoji} ${t('status.usingToolCount', locale, { toolName, count: statusRepeatCount })}`,
+                  text: repeatStatusText,
                 }).catch(() => {});
+                startHeartbeat(repeatStatusText);
               } else {
                 lastStatusText = newStatusText;
                 statusRepeatCount = 1;
@@ -730,6 +759,7 @@ export class SlackHandler {
                   ts: statusMessageTs,
                   text: newStatusText,
                 }).catch(() => {});
+                startHeartbeat(newStatusText);
               }
             }
             await this.updateMessageReaction(sessionKey, toolEmoji);
@@ -976,6 +1006,7 @@ export class SlackHandler {
         await this.fileHandler.cleanupTempFiles(processedFiles);
       }
     } finally {
+      stopHeartbeat();
       this.activeProcesses.delete(sessionKey);
 
       if (session?.sessionId) {

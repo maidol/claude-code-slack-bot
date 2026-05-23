@@ -66,7 +66,7 @@ export class FileHandler {
         name: file.name,
         mimetype: file.mimetype,
         isImage: this.isImageFile(file.mimetype),
-        isText: this.isTextFile(file.mimetype),
+        isText: this.isTextFile(file.mimetype, file.name, file.filetype),
         size: file.size,
         tempPath,
       };
@@ -89,7 +89,7 @@ export class FileHandler {
     return mimetype.startsWith('image/');
   }
 
-  private isTextFile(mimetype: string): boolean {
+  private isTextFile(mimetype: string, name?: string, slackFiletype?: string): boolean {
     const textTypes = [
       'text/',
       'application/json',
@@ -100,7 +100,33 @@ export class FileHandler {
       'application/x-yaml',
     ];
 
-    return textTypes.some(type => mimetype.startsWith(type));
+    if (textTypes.some(type => mimetype.startsWith(type))) return true;
+
+    const codeFiletypes = new Set([
+      'javascript', 'typescript', 'python', 'java', 'c', 'cpp', 'csharp',
+      'go', 'rust', 'ruby', 'php', 'shell', 'bash', 'sql', 'html', 'css',
+      'scss', 'less', 'yaml', 'toml', 'markdown', 'md', 'json', 'xml',
+      'jsx', 'tsx', 'vue', 'svelte', 'kotlin', 'swift', 'r', 'lua', 'perl',
+      'dart', 'scala', 'clojure', 'haskell', 'elixir', 'erlang', 'objc',
+      'matlab', 'tex', 'dockerfile', 'makefile', 'text',
+    ]);
+    if (slackFiletype && codeFiletypes.has(slackFiletype.toLowerCase())) return true;
+
+    if (name) {
+      const ext = name.split('.').pop()?.toLowerCase();
+      const textExts = new Set([
+        'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'java', 'c', 'cpp',
+        'h', 'hpp', 'cs', 'go', 'rs', 'rb', 'php', 'sh', 'bash', 'zsh',
+        'sql', 'html', 'htm', 'css', 'scss', 'less', 'yaml', 'yml', 'toml',
+        'md', 'markdown', 'json', 'xml', 'vue', 'svelte', 'kt', 'swift',
+        'r', 'lua', 'pl', 'pm', 'dart', 'scala', 'clj', 'hs', 'ex', 'exs',
+        'erl', 'm', 'mm', 'txt', 'log', 'env', 'ini', 'conf', 'config',
+        'csv', 'tsv', 'gradle', 'properties',
+      ]);
+      if (ext && textExts.has(ext)) return true;
+    }
+
+    return false;
   }
 
   async formatFilePrompt(files: ProcessedFile[], userText: string): Promise<string> {
@@ -118,11 +144,12 @@ export class FileHandler {
         } else if (file.isText) {
           prompt += `\n## File: ${file.name}\n`;
           prompt += `File type: ${file.mimetype}\n`;
-          
+          prompt += `Path: ${file.path}\n`;
+
           try {
             const content = fs.readFileSync(file.path, 'utf-8');
             if (content.length > 10000) {
-              prompt += `Content (truncated to first 10000 characters):\n\`\`\`\n${content.substring(0, 10000)}...\n\`\`\`\n`;
+              prompt += `Content (first 10000 chars shown below; use the Read tool on Path for the full file):\n\`\`\`\n${content.substring(0, 10000)}...\n\`\`\`\n`;
             } else {
               prompt += `Content:\n\`\`\`\n${content}\n\`\`\`\n`;
             }
@@ -132,8 +159,9 @@ export class FileHandler {
         } else {
           prompt += `\n## File: ${file.name}\n`;
           prompt += `File type: ${file.mimetype}\n`;
+          prompt += `Path: ${file.path}\n`;
           prompt += `Size: ${file.size} bytes\n`;
-          prompt += `Note: This is a binary file. Content analysis may be limited.\n`;
+          prompt += `Note: Try the Read tool on Path; it supports images and PDFs natively.\n`;
         }
       }
       
