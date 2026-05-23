@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+// override: true makes .env the source of truth even when the parent shell
+// (or pm2 daemon) already exported ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY.
+dotenv.config({ override: true });
 
 export const config = {
   slack: {
