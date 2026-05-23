@@ -65,6 +65,7 @@ async function start() {
       usingBedrock: config.claude.useBedrock,
       usingVertex: config.claude.useVertex,
       usingAnthropicAPI: !config.claude.useBedrock && !config.claude.useVertex,
+      anthropicBaseUrl: config.anthropic.baseUrl || 'default (api.anthropic.com)',
       debugMode: config.debug,
       baseDirectory: config.baseDirectory || 'not set',
       mcpServers: mcpConfig ? Object.keys(mcpConfig.mcpServers).length : 0,

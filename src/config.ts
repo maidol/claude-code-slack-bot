@@ -12,6 +12,10 @@ export const config = {
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY!,
+    // Optional proxy/gateway base URL. Bot does not read this directly — it is
+    // forwarded to the spawned `claude` CLI via process.env (cli-handler.ts).
+    // Declared here for visibility and startup-log diagnostics.
+    baseUrl: process.env.ANTHROPIC_BASE_URL || '',
   },
   claude: {
     useBedrock: process.env.CLAUDE_CODE_USE_BEDROCK === '1',
