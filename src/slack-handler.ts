@@ -617,22 +617,26 @@ export class SlackHandler {
     let apiKeyCostInfo: { queryCost: number; totalCost: number } | null = null;
     let cliError = false;
 
-    // Heartbeat: keep status message alive with elapsed time during long-running tool calls
+    // Heartbeat: keep status message alive with rotating spinner + elapsed time during long-running tool calls
     let heartbeatTimer: NodeJS.Timeout | null = null;
     let heartbeatStart = 0;
     let heartbeatLabel = '';
+    let heartbeatFrame = 0;
+    const SPINNER_FRAMES = ['🕐', '🕑', '🕒', '🕓', '🕔', '🕕', '🕖', '🕗', '🕘', '🕙', '🕚', '🕛'];
     const startHeartbeat = (label: string) => {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatLabel = label;
       heartbeatStart = Date.now();
+      heartbeatFrame = 0;
       heartbeatTimer = setInterval(() => {
         if (!statusMessageTs) return;
         const sec = Math.floor((Date.now() - heartbeatStart) / 1000);
-        if (sec < 5) return;
+        const spinner = SPINNER_FRAMES[heartbeatFrame % SPINNER_FRAMES.length];
+        heartbeatFrame++;
         this.app.client.chat.update({
           channel,
           ts: statusMessageTs,
-          text: `${heartbeatLabel} (${sec}s)`,
+          text: `${heartbeatLabel} ${spinner} ${sec}s`,
         }).catch(() => {});
       }, 5000);
     };
@@ -717,7 +721,6 @@ export class SlackHandler {
       this.activeProcesses.set(sessionKey, cliProcess);
 
       for await (const event of cliProcess) {
-        stopHeartbeat();
         // Session init tracking
         if (event.type === 'system' && (event as any).subtype === 'init') {
           const initEvent = event as any;
@@ -763,6 +766,9 @@ export class SlackHandler {
               }
             }
             await this.updateMessageReaction(sessionKey, toolEmoji);
+          } else if (streamEvent?.type === 'content_block_start' && streamEvent.content_block?.type === 'text') {
+            // Model is writing text — stop heartbeat so spinner doesn't overwrite ✍️ Writing status
+            stopHeartbeat();
           }
           continue;
         }
@@ -814,6 +820,7 @@ export class SlackHandler {
               // NOTE: Do NOT check isRateLimitText on assistant text content here.
               // It causes false positives when Claude mentions "rate limit" in normal conversation.
               // Rate limits are reliably detected via rate_limit_event (line ~524) and result.is_error (line ~616).
+              stopHeartbeat();
               currentMessages.push(content);
               if (statusMessageTs) {
                 const newStatusText = `✍️ ${t('status.writing', locale)}`;
@@ -828,6 +835,7 @@ export class SlackHandler {
             }
           }
         } else if (event.type === 'result') {
+          stopHeartbeat();
           const resultEvent = event as CliResultEvent;
           this.logger.info('Received result from CLI', {
             subtype: resultEvent.subtype,
