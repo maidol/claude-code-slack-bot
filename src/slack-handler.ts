@@ -630,6 +630,12 @@ export class SlackHandler {
     const channelModel = SlackHandler.resolveModelAlias(this.channelModels.get(channel) || config.defaultModel);
     let apiKeyCostInfo: { queryCost: number; totalCost: number } | null = null;
     let cliError = false;
+    let totalInputTokens = 0;
+    const formatTokens = (n: number): string => {
+      if (n < 1000) return String(n);
+      if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    };
 
     // Heartbeat: brail spinner + elapsed seconds + cancel hint, refreshed every 2s.
     // Disabled when LOADING_SPINNER_ENABLED=0 (single static chat.update on state change instead).
@@ -650,7 +656,10 @@ export class SlackHandler {
         label = `${heartbeatPrefixEmoji} *${verb}...*`;
       }
       const cancelHint = t('status.cancelHint', locale);
-      return `${label} ${spinner} ${sec}s\n\n${cancelHint}`;
+      const tokenSuffix = totalInputTokens > 0
+        ? ` · ${t('status.tokens', locale, { count: formatTokens(totalInputTokens) })}`
+        : '';
+      return `${label} ${spinner} ${sec}s${tokenSuffix}\n\n${cancelHint}`;
     };
     const startHeartbeat = (label: string, opts?: { phase?: 'thinking' | 'tool'; prefixEmoji?: string }) => {
       if (!config.loadingSpinner.enabled) return;
@@ -818,6 +827,14 @@ export class SlackHandler {
 
         if (event.type === 'assistant') {
           const assistantEvent = event as CliAssistantEvent;
+
+          // Track cumulative input tokens (model + cache) for heartbeat display
+          const usage = (assistantEvent.message as any)?.usage;
+          if (usage) {
+            totalInputTokens = (usage.input_tokens || 0)
+              + (usage.cache_read_input_tokens || 0)
+              + (usage.cache_creation_input_tokens || 0);
+          }
 
           // Track last assistant message UUID for session continuity
           if (assistantEvent.uuid && session) {
